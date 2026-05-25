@@ -87,6 +87,7 @@ let state = {
   sessionIndex: 0,
   sessionCustomers: [],
   sessionInterval: null,
+  sessionResult: null,
 };
 
 /* ──────────────────────────────────────────────
@@ -243,6 +244,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // Session card
   document.getElementById('session-start-btn').addEventListener('click', toggleSession);
   document.getElementById('session-skip-btn').addEventListener('click', sessionSkip);
+  document.getElementById('session-save-btn').addEventListener('click', sessionSaveAndNext);
+
+  // Sonuç butonları (result-btn)
+  document.getElementById('session-result-btns').addEventListener('click', (e) => {
+    const btn = e.target.closest('.result-btn');
+    if (!btn) return;
+    document.querySelectorAll('.result-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    state.sessionResult = btn.dataset.result;
+    document.getElementById('session-save-btn').disabled = false;
+  });
 
   // Bulk message modal
   document.getElementById('bulk-msg-btn').addEventListener('click', openBulkModal);
@@ -1025,16 +1037,69 @@ function stopSession() {
   document.getElementById('session-badge').classList.remove('active');
   document.getElementById('session-badge-text').textContent = 'Hazır';
   document.getElementById('session-customer').classList.remove('visible');
+  document.getElementById('session-result-panel').classList.remove('visible');
 
-  // Reset timer display to chosen duration
   state.sessionSeconds = getSessionDuration();
   updateTimerDisplay();
+  resetResultPanel();
+}
+
+function resetResultPanel() {
+  state.sessionResult = null;
+  document.querySelectorAll('.result-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('session-note').value = '';
+  document.getElementById('session-save-btn').disabled = true;
 }
 
 function sessionSkip() {
   if (!state.sessionActive) return;
   clearInterval(state.sessionInterval);
   document.getElementById('session-expired-toast').classList.remove('visible');
+  resetResultPanel();
+
+  state.sessionDone++;
+  state.sessionIndex++;
+  state.sessionSeconds = getSessionDuration();
+  document.getElementById('session-done-count').textContent = state.sessionDone;
+  document.getElementById('session-badge-text').textContent = 'Aktif';
+
+  updateSessionCustomer();
+  updateTimerDisplay();
+  state.sessionInterval = setInterval(sessionTick, 1000);
+}
+
+async function sessionSaveAndNext() {
+  if (!state.sessionResult) return;
+  const customer = state.sessionCustomers[state.sessionIndex % state.sessionCustomers.length];
+  if (!customer) { sessionSkip(); return; }
+
+  const note = document.getElementById('session-note').value.trim();
+
+  // Demo modda sadece UI güncelle, gerçek modda API'ye kaydet
+  if (!state.isDemoMode && customer.id) {
+    try {
+      await apiFetch('/api/activities', {
+        method: 'POST',
+        body: { customer_id: customer.id, result: state.sessionResult, note },
+      });
+      // Cached customer'ı güncelle
+      const idx = state.customers.findIndex(c => c.id === customer.id);
+      if (idx !== -1) {
+        const statusMap = {
+          'görüşüldü': 'contacted', 'mail_atıldı': 'contacted',
+          'ziyaret_planlandı': 'contacted', 'takip_gerekiyor': 'call_later',
+          'ulaşılamadı': 'unreachable'
+        };
+        state.customers[idx].status = statusMap[state.sessionResult] || state.customers[idx].status;
+        state.customers[idx].last_contacted = new Date().toISOString();
+      }
+    } catch (e) { console.error('Kayıt hatası:', e); }
+  }
+
+  // Sonraki müşteriye geç
+  clearInterval(state.sessionInterval);
+  document.getElementById('session-expired-toast').classList.remove('visible');
+  resetResultPanel();
 
   state.sessionDone++;
   state.sessionIndex++;
@@ -1064,13 +1129,17 @@ function updateSessionCustomer() {
   const customers = state.sessionCustomers;
   if (!customers.length) {
     document.getElementById('session-customer').classList.remove('visible');
+    document.getElementById('session-result-panel').classList.remove('visible');
     return;
   }
   const c = customers[state.sessionIndex % customers.length];
-  document.getElementById('session-customer-avatar').textContent = c.company_name.substring(0,1).toUpperCase();
+  document.getElementById('session-customer-avatar').textContent = c.company_name.substring(0,2).toUpperCase();
   document.getElementById('session-customer-name').textContent   = c.company_name;
-  document.getElementById('session-customer-phone').textContent  = c.contact_name + (c.phone ? ' · ' + c.phone : '');
+  document.getElementById('session-customer-phone').textContent  =
+    (c.contact_name || '') + (c.phone ? ' · ' + c.phone : '');
   document.getElementById('session-customer').classList.add('visible');
+  document.getElementById('session-result-panel').classList.add('visible');
+  resetResultPanel();
 }
 
 function playAlertBeeps() {

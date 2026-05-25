@@ -204,7 +204,29 @@
               <div class="session-customer-name" id="session-customer-name">–</div>
               <div class="session-customer-phone" id="session-customer-phone">–</div>
             </div>
-            <button class="session-skip-btn" id="session-skip-btn">Sonraki →</button>
+          </div>
+
+          <!-- Sonuç + Not (müşteri aktifken göster) -->
+          <div class="session-result-panel" id="session-result-panel">
+            <div class="session-result-btns" id="session-result-btns">
+              <button class="result-btn" data-result="görüşüldü">✅ Görüşüldü</button>
+              <button class="result-btn" data-result="mail_atıldı">📧 Mail Atıldı</button>
+              <button class="result-btn" data-result="ulaşılamadı">📵 Ulaşılamadı</button>
+              <button class="result-btn" data-result="ziyaret_planlandı">📅 Ziyaret Planlandı</button>
+              <button class="result-btn" data-result="takip_gerekiyor">🔄 Takip Gerekiyor</button>
+            </div>
+            <textarea
+              id="session-note"
+              class="session-note-input"
+              placeholder="Not ekle (isteğe bağlı)…"
+              rows="2"
+            ></textarea>
+            <div class="session-result-footer">
+              <button class="session-save-btn" id="session-save-btn" disabled>
+                💾 Kaydet ve Sonraki →
+              </button>
+              <button class="session-skip-btn" id="session-skip-btn">Geç →</button>
+            </div>
           </div>
         </div>
 

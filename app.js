@@ -1,8 +1,23 @@
 /* ──────────────────────────────────────────────
-   Config — replace with your Supabase credentials
+   API helper — tüm istekler /api/* üzerinden
 ────────────────────────────────────────────── */
-const SUPABASE_URL = 'https://YOUR_PROJECT.supabase.co';
-const SUPABASE_KEY = 'YOUR_ANON_KEY';
+async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem('sp_token');
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
 
 /* ──────────────────────────────────────────────
    Demo Mock Data
@@ -146,8 +161,16 @@ function formatDate(dateStr) {
    Init
 ────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
-  if (SUPABASE_URL !== 'https://YOUR_PROJECT.supabase.co') {
-    try { state.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); } catch(e) {}
+  // Daha önce giriş yapılmışsa oturumu devam ettir
+  const savedToken = localStorage.getItem('sp_token');
+  const savedUser  = localStorage.getItem('sp_user');
+  if (savedToken && savedUser) {
+    try {
+      state.currentUser = JSON.parse(savedUser);
+      state.isDemoMode  = false;
+      enterApp();
+      return;
+    } catch { localStorage.clear(); }
   }
 
   // Set today's date in hero
@@ -292,12 +315,11 @@ async function handleLogin(email, password) {
   errEl.classList.add('hidden');
 
   try {
-    if (!state.supabase) throw new Error('Supabase yapılandırılmamış. Demo modu kullanın.');
-    const { data, error } = await state.supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    const { data: userData } = await state.supabase.from('users').select('*').eq('id', data.user.id).single();
-    state.currentUser = userData || { id: data.user.id, name: email.split('@')[0], role: 'sales_rep', email };
-    state.isDemoMode = false;
+    const data = await apiFetch('/api/auth', { method: 'POST', body: { email, password } });
+    localStorage.setItem('sp_token', data.token);
+    localStorage.setItem('sp_user', JSON.stringify(data.user));
+    state.currentUser = data.user;
+    state.isDemoMode  = false;
     enterApp();
   } catch (err) {
     errEl.textContent = err.message;
@@ -316,9 +338,10 @@ function enterDemoMode() {
 }
 
 function handleLogout() {
-  if (state.supabase && !state.isDemoMode) state.supabase.auth.signOut();
+  localStorage.removeItem('sp_token');
+  localStorage.removeItem('sp_user');
   state.currentUser = null;
-  state.isDemoMode = false;
+  state.isDemoMode  = false;
   document.getElementById('app-screen').classList.remove('active');
   document.getElementById('app-screen').classList.add('hidden');
   document.getElementById('login-screen').classList.remove('hidden');
@@ -1057,28 +1080,28 @@ function playAlertBeeps() {
 }
 
 /* ──────────────────────────────────────────────
-   Supabase Data Fetchers
+   Data Fetchers  (demo → mock data, gerçek → /api)
 ────────────────────────────────────────────── */
 async function fetchCustomers() {
-  if (!state.supabase) return DEMO_CUSTOMERS;
-  const { data } = await state.supabase.from('customers').select('*').order('updated_at', { ascending: false });
-  return data || [];
+  if (state.isDemoMode) return DEMO_CUSTOMERS;
+  try { return await apiFetch('/api/customers'); }
+  catch { return []; }
 }
 
 async function fetchOffers() {
-  if (!state.supabase) return DEMO_OFFERS;
-  const { data } = await state.supabase.from('offers').select('*, customers(company_name)').order('created_at', { ascending: false });
-  return (data || []).map(o => ({ ...o, company_name: o.customers?.company_name || '' }));
+  if (state.isDemoMode) return DEMO_OFFERS;
+  try { return await apiFetch('/api/offers'); }
+  catch { return []; }
 }
 
 async function fetchActivities() {
-  if (!state.supabase) return DEMO_ACTIVITIES;
-  const { data } = await state.supabase.from('activities').select('*, customers(company_name)').order('created_at', { ascending: false });
-  return (data || []).map(a => ({ ...a, company_name: a.customers?.company_name || '' }));
+  if (state.isDemoMode) return DEMO_ACTIVITIES;
+  try { return await apiFetch('/api/activities'); }
+  catch { return []; }
 }
 
 async function fetchCampaigns() {
-  if (!state.supabase) return DEMO_CAMPAIGNS;
-  const { data } = await state.supabase.from('campaigns').select('*').order('created_at', { ascending: false });
-  return data || [];
+  if (state.isDemoMode) return DEMO_CAMPAIGNS;
+  try { return await apiFetch('/api/campaigns'); }
+  catch { return []; }
 }

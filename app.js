@@ -165,17 +165,6 @@ function formatDate(dateStr) {
    Init
 ────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
-  // Daha önce giriş yapılmışsa oturumu devam ettir
-  const savedToken = localStorage.getItem('sp_token');
-  const savedUser  = localStorage.getItem('sp_user');
-  if (savedToken && savedUser) {
-    try {
-      state.currentUser = JSON.parse(savedUser);
-      state.isDemoMode  = false;
-      enterApp();
-      return;
-    } catch { localStorage.clear(); }
-  }
 
   // Set today's date in hero
   const now = new Date();
@@ -302,6 +291,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Message textarea live preview
   document.getElementById('bulk-message').addEventListener('input', updateBulkPreview);
+
+  // ── Oturum devam kontrolü (tüm listener'lar kurulduktan SONRA) ──
+  const savedToken = localStorage.getItem('sp_token');
+  const savedUser  = localStorage.getItem('sp_user');
+  if (savedToken && savedUser) {
+    try {
+      state.currentUser = JSON.parse(savedUser);
+      state.isDemoMode  = false;
+      enterApp();
+    } catch { localStorage.clear(); }
+  }
 });
 
 /* ──────────────────────────────────────────────

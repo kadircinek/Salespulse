@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>SalesPulse CRM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+
+<!-- ═══════════════════════════ LOGIN ═══════════════════════════ -->
+<div id="login-screen" class="screen active">
+  <div class="login-bg">
+    <div class="login-blob b1"></div>
+    <div class="login-blob b2"></div>
+    <div class="login-blob b3"></div>
+  </div>
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="brand-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+          <polyline points="16 7 22 7 22 13"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">SalesPulse</div>
+        <div class="brand-tagline">CRM Platform</div>
+      </div>
+    </div>
+
+    <h1 class="login-heading">Tekrar Hoş Geldiniz</h1>
+    <p class="login-sub">Hesabınıza giriş yapın</p>
+
+    <form id="login-form">
+      <div class="field">
+        <label class="field-label">E-posta adresi</label>
+        <div class="field-wrap">
+          <svg class="field-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          <input id="login-email" type="email" placeholder="ornek@sirket.com" autocomplete="email"/>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Şifre</label>
+        <div class="field-wrap">
+          <svg class="field-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          <input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password"/>
+        </div>
+      </div>
+      <div id="login-error" class="alert-error hidden"></div>
+      <button type="submit" class="btn-submit" id="login-btn">
+        <span id="login-btn-text">Giriş Yap</span>
+        <div class="btn-spinner hidden" id="login-spinner"></div>
+      </button>
+    </form>
+
+    <div class="login-divider"><span>veya</span></div>
+
+    <button id="demo-btn" class="btn-demo">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      Demo Modu ile Dene
+    </button>
+    <p class="demo-note">Supabase gerekmez · Mock verilerle tam işlevli</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ APP ═══════════════════════════ -->
+<div id="app-screen" class="screen hidden">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-logo">
+      <div class="sb-logo-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+          <polyline points="16 7 22 7 22 13"/>
+        </svg>
+      </div>
+      <div class="sb-logo-text">
+        <span class="sb-logo-name">SalesPulse</span>
+        <span class="sb-logo-ver">CRM v1.0</span>
+      </div>
+    </div>
+
+    <div class="sb-section-label">Ana Menü</div>
+    <nav class="sb-nav">
+      <a class="sb-item active" data-page="dashboard" href="#">
+        <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Dashboard</span>
+        <div class="sb-badge" id="sb-badge-dashboard"></div>
+      </a>
+      <a class="sb-item" data-page="calls" href="#">
+        <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.06 1.18 2 2 0 012.03 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006.29 6.29l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+        <span>Günlük Aramalar</span>
+        <div class="sb-badge" id="sb-badge-calls"></div>
+      </a>
+      <a class="sb-item" data-page="customers" href="#">
+        <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        <span>Müşteriler</span>
+      </a>
+      <a class="sb-item" data-page="offers" href="#">
+        <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>Teklifler</span>
+      </a>
+      <a class="sb-item" data-page="campaigns" href="#">
+        <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2L15 22 11 13 2 9l20-7z"/></svg>
+        <span>Kampanyalar</span>
+      </a>
+    </nav>
+
+    <div class="sb-spacer"></div>
+    <div class="sb-user">
+      <div class="sb-avatar" id="sb-avatar">D</div>
+      <div class="sb-user-info">
+        <div class="sb-user-name" id="sb-user-name">Demo Kullanıcı</div>
+        <div class="sb-user-role" id="sb-user-role">Satış Temsilcisi</div>
+      </div>
+      <button class="sb-logout" id="logout-btn" title="Çıkış Yap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="app-main">
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <button class="topbar-menu" id="menu-toggle">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="topbar-breadcrumb" id="topbar-title">Dashboard</div>
+      <div class="topbar-right">
+        <button class="topbar-btn" id="topbar-refresh" title="Yenile">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+        </button>
+        <div class="topbar-avatar" id="topbar-avatar">D</div>
+      </div>
+    </header>
+
+    <!-- Pages -->
+    <div class="pages-wrap">
+
+      <!-- ─── DASHBOARD ─── -->
+      <div id="page-dashboard" class="page active">
+        <div class="page-hero">
+          <div>
+            <div class="hero-greet" id="greeting-text">Günaydın,</div>
+            <h1 class="hero-name" id="greeting-name">Demo Kullanıcı</h1>
+          </div>
+          <div class="hero-date" id="hero-date"></div>
+        </div>
+
+        <!-- Session Card -->
+        <div class="session-card" id="session-card">
+          <!-- Top row: timer | stats + button -->
+          <div class="session-top-row">
+            <div class="session-info">
+              <div class="session-badge" id="session-badge">
+                <span class="session-dot"></span>
+                <span id="session-badge-text">Hazır</span>
+              </div>
+              <div class="session-timer" id="session-timer">00:00</div>
+              <div class="session-time-label">Seans Süresi</div>
+            </div>
+            <div class="session-actions">
+              <div class="session-stats">
+                <div class="session-stat">
+                  <div class="session-stat-val" id="session-total-count">0</div>
+                  <div class="session-stat-lbl">Müşteri</div>
+                </div>
+                <div class="session-stat">
+                  <div class="session-stat-val" id="session-done-count">0</div>
+                  <div class="session-stat-lbl">Tamamlandı</div>
+                </div>
+              </div>
+              <div class="session-duration-wrap">
+                <select id="session-duration" class="session-duration-sel" title="Müşteri başına süre">
+                  <option value="120">2 dk</option>
+                  <option value="180">3 dk</option>
+                  <option value="300" selected>5 dk</option>
+                  <option value="600">10 dk</option>
+                </select>
+              </div>
+              <button class="session-start-btn" id="session-start-btn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Başlat
+              </button>
+            </div>
+          </div>
+          <!-- Expiry toast (shown when countdown hits 0) -->
+          <div class="session-expired-toast" id="session-expired-toast">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Süre doldu! Sonraki müşteriye geçiliyor…
+          </div>
+
+          <!-- Bottom row: current customer (shown when active) -->
+          <div class="session-customer" id="session-customer">
+            <div class="session-customer-avatar" id="session-customer-avatar">–</div>
+            <div class="session-customer-info">
+              <div class="session-customer-name" id="session-customer-name">–</div>
+              <div class="session-customer-phone" id="session-customer-phone">–</div>
+            </div>
+            <button class="session-skip-btn" id="session-skip-btn">Sonraki →</button>
+          </div>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi-card kpi-blue">
+            <div class="kpi-top">
+              <span class="kpi-label">Bugün Arama</span>
+              <div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.06 1.18 2 2 0 012.03 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006.29 6.29l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg></div>
+            </div>
+            <div class="kpi-val" id="kpi-calls">8</div>
+            <div class="kpi-sub">Hedef: 20</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" style="width:40%;background:#3B82F6"></div></div>
+          </div>
+          <div class="kpi-card kpi-green">
+            <div class="kpi-top">
+              <span class="kpi-label">WhatsApp</span>
+              <div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+            </div>
+            <div class="kpi-val" id="kpi-wa">3</div>
+            <div class="kpi-sub">Gönderildi</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" style="width:15%;background:#22C55E"></div></div>
+          </div>
+          <div class="kpi-card kpi-orange">
+            <div class="kpi-top">
+              <span class="kpi-label">E-posta</span>
+              <div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
+            </div>
+            <div class="kpi-val" id="kpi-email">2</div>
+            <div class="kpi-sub">Gönderildi</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" style="width:10%;background:#F97316"></div></div>
+          </div>
+          <div class="kpi-card kpi-purple">
+            <div class="kpi-top">
+              <span class="kpi-label">Teklif Takip</span>
+              <div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+            </div>
+            <div class="kpi-val" id="kpi-offers">0</div>
+            <div class="kpi-sub">Bekliyor</div>
+            <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-offers-bar" style="width:0%;background:#A855F7"></div></div>
+          </div>
+        </div>
+
+        <div class="dash-grid">
+          <!-- Due Offers -->
+          <div class="dash-card">
+            <div class="card-head">
+              <div class="card-head-left">
+                <div class="card-dot orange"></div>
+                <h3>Teklif Takipleri</h3>
+              </div>
+              <span class="pill pill-orange" id="d-offers-count">0</span>
+            </div>
+            <div id="d-offers-list" class="feed"></div>
+          </div>
+
+          <!-- Overdue -->
+          <div class="dash-card">
+            <div class="card-head">
+              <div class="card-head-left">
+                <div class="card-dot red"></div>
+                <h3>Geciken Görevler</h3>
+              </div>
+              <span class="pill pill-red" id="d-overdue-count">0</span>
+            </div>
+            <div id="d-overdue-list" class="feed"></div>
+          </div>
+
+          <!-- Pending -->
+          <div class="dash-card">
+            <div class="card-head">
+              <div class="card-head-left">
+                <div class="card-dot blue"></div>
+                <h3>Bekleyen Takipler</h3>
+              </div>
+              <span class="pill pill-blue" id="d-pending-count">0</span>
+            </div>
+            <div id="d-pending-list" class="feed"></div>
+          </div>
+
+          <!-- Today's Calls -->
+          <div class="dash-card">
+            <div class="card-head">
+              <div class="card-head-left">
+                <div class="card-dot green"></div>
+                <h3>Bugün Aranacaklar</h3>
+              </div>
+            </div>
+            <div id="d-calls-list" class="feed"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── CALLS ─── -->
+      <div id="page-calls" class="page hidden">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Günlük Aramalar</h1>
+            <p class="page-desc">Bugün aramanız gereken müşteri listesi</p>
+          </div>
+        </div>
+        <div class="progress-banner">
+          <div class="pb-left">
+            <div class="pb-label">Bugünkü İlerleme</div>
+            <div class="pb-val"><span id="calls-done">3</span> / <span id="calls-total">12</span> <span class="pb-unit">arama tamamlandı</span></div>
+            <div class="pb-track">
+              <div class="pb-track-fill" id="pb-fill" style="width:25%"></div>
+            </div>
+          </div>
+          <div class="pb-ring">
+            <svg width="80" height="80">
+              <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="7"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="white" stroke-width="7" stroke-linecap="round"
+                stroke-dasharray="201" stroke-dashoffset="151" id="pb-ring" transform="rotate(-90 40 40)"/>
+            </svg>
+            <div class="pb-pct" id="pb-pct">25%</div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="calls-table">
+            <thead>
+              <tr><th>#</th><th>Firma</th><th>Yetkili</th><th>Telefon</th><th>Durum</th><th>Son Görüşme</th><th></th></tr>
+            </thead>
+            <tbody id="calls-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ─── CUSTOMERS ─── -->
+      <div id="page-customers" class="page hidden">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Müşteriler</h1>
+            <p class="page-desc" id="customers-count-text">0 müşteri</p>
+          </div>
+          <button class="btn-primary" id="add-customer-btn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Müşteri Ekle
+          </button>
+        </div>
+
+        <div class="toolbar">
+          <div class="search-field">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="customer-search" type="text" placeholder="Firma, yetkili, e-mail veya telefon ara…"/>
+          </div>
+          <div class="chip-row" id="customer-filters">
+            <button class="chip active" data-status="">Tümü</button>
+            <button class="chip" data-status="new">Yeni</button>
+            <button class="chip" data-status="to_call">Aranacak</button>
+            <button class="chip" data-status="contacted">Görüşüldü</button>
+            <button class="chip" data-status="interested">İlgili</button>
+            <button class="chip" data-status="offer_sent">Teklif Gönderildi</button>
+            <button class="chip" data-status="negotiating">Pazarlıkta</button>
+            <button class="chip" data-status="sold">Satış Yapıldı</button>
+            <button class="chip" data-status="lost">Kaybedildi</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table" id="customers-table">
+            <thead>
+              <tr><th>Firma</th><th>Yetkili</th><th>Telefon</th><th>Sektör</th><th>Şehir</th><th>Durum</th><th>Son Görüşme</th><th></th></tr>
+            </thead>
+            <tbody id="customers-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ─── OFFERS ─── -->
+      <div id="page-offers" class="page hidden">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Teklifler</h1>
+            <p class="page-desc" id="offers-count-text">0 teklif</p>
+          </div>
+          <button class="btn-primary" id="add-offer-btn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Yeni Teklif
+          </button>
+        </div>
+        <div class="toolbar">
+          <div class="chip-row" id="offer-filters">
+            <button class="chip active" data-status="">Tümü</button>
+            <button class="chip" data-status="draft">Taslak</button>
+            <button class="chip" data-status="sent">Gönderildi</button>
+            <button class="chip" data-status="viewed">Görüntülendi</button>
+            <button class="chip" data-status="followup_pending">Takip Bekliyor</button>
+            <button class="chip" data-status="negotiating">Müzakerede</button>
+            <button class="chip" data-status="accepted">Kabul Edildi</button>
+            <button class="chip" data-status="rejected">Reddedildi</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>Teklif No</th><th>Müşteri</th><th>Ürün</th><th>Miktar</th><th>Tutar</th><th>Geçerlilik</th><th>Takip</th><th>Durum</th></tr>
+            </thead>
+            <tbody id="offers-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ─── CAMPAIGNS ─── -->
+      <div id="page-campaigns" class="page hidden">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Kampanyalar</h1>
+            <p class="page-desc">Toplu mesaj kampanyaları</p>
+          </div>
+          <button class="btn-primary" id="bulk-msg-btn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2L15 22 11 13 2 9l20-7z"/></svg>
+            Toplu Mesaj Gönder
+          </button>
+        </div>
+        <div id="campaigns-container"></div>
+      </div>
+
+    </div><!-- /pages-wrap -->
+  </div><!-- /app-main -->
+</div><!-- /app-screen -->
+
+<!-- ═══ CUSTOMER DETAIL DRAWER ═══ -->
+<div id="drawer-backdrop" class="drawer-backdrop hidden"></div>
+<div id="customer-drawer" class="drawer hidden">
+  <div class="drawer-header">
+    <div id="drawer-avatar" class="drawer-avatar">A</div>
+    <div>
+      <div class="drawer-company" id="drawer-company">–</div>
+      <div class="drawer-contact" id="drawer-contact">–</div>
+    </div>
+    <button class="drawer-close" id="drawer-close">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="drawer-body" id="drawer-body"></div>
+</div>
+
+<!-- ═══ BULK MESSAGE MODAL ═══ -->
+<div id="bulk-modal-backdrop" class="modal-backdrop hidden"></div>
+<div id="bulk-modal" class="modal hidden">
+  <div class="modal-header">
+    <h2>Toplu Mesaj Gönder</h2>
+    <button class="modal-close" id="bulk-modal-close">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="modal-steps">
+    <div class="step active" id="step-1-dot"><span>1</span> Alıcılar</div>
+    <div class="step-line"></div>
+    <div class="step" id="step-2-dot"><span>2</span> Mesaj</div>
+    <div class="step-line"></div>
+    <div class="step" id="step-3-dot"><span>3</span> Gönder</div>
+  </div>
+  <div class="modal-body">
+    <!-- Step 1 -->
+    <div id="bulk-step-1">
+      <div class="bulk-filters">
+        <select id="bulk-status-filter" class="select-field">
+          <option value="">Tüm durumlar</option>
+          <option value="new">Yeni</option>
+          <option value="to_call">Aranacak</option>
+          <option value="contacted">Görüşüldü</option>
+          <option value="interested">İlgili</option>
+          <option value="offer_sent">Teklif Gönderildi</option>
+        </select>
+        <label class="bulk-select-all">
+          <input type="checkbox" id="bulk-select-all"/> Tümünü Seç
+        </label>
+      </div>
+      <div id="bulk-customer-list" class="bulk-list"></div>
+      <div class="bulk-selection-info"><span id="bulk-selected-count">0</span> müşteri seçildi</div>
+    </div>
+    <!-- Step 2 -->
+    <div id="bulk-step-2" class="hidden">
+      <div class="template-btns">
+        <button class="tpl-btn" data-tpl="price">📢 Fiyat Duyurusu</button>
+        <button class="tpl-btn" data-tpl="followup">🔄 Takip Mesajı</button>
+        <button class="tpl-btn" data-tpl="promo">🎁 Promosyon</button>
+      </div>
+      <div class="var-hints">
+        <span>Değişkenler:</span>
+        <button class="var-btn" data-var="{isim}">{isim}</button>
+        <button class="var-btn" data-var="{firma}">{firma}</button>
+      </div>
+      <textarea id="bulk-message" class="message-area" rows="5" placeholder="Mesajınızı buraya yazın…"></textarea>
+      <div class="preview-box">
+        <div class="preview-title">Önizleme (ilk alıcı)</div>
+        <div id="bulk-preview" class="preview-text">Mesaj giriniz…</div>
+      </div>
+    </div>
+    <!-- Step 3 -->
+    <div id="bulk-step-3" class="hidden">
+      <div id="bulk-sending" class="bulk-sending hidden">
+        <div class="sending-icon">📤</div>
+        <div class="sending-title">Gönderiliyor…</div>
+        <div class="progress-bar"><div class="progress-fill" id="bulk-progress"></div></div>
+        <div class="sending-info"><span id="bulk-sent-n">0</span> / <span id="bulk-total-n">0</span> mesaj gönderildi</div>
+      </div>
+      <div id="bulk-done" class="bulk-done hidden">
+        <div class="done-icon">✅</div>
+        <div class="done-title">Gönderim Tamamlandı!</div>
+        <div class="done-stats">
+          <span class="done-stat"><b id="done-sent">0</b> başarılı</span>
+          <span class="done-stat err"><b id="done-failed">0</b> başarısız</span>
+        </div>
+      </div>
+      <div id="bulk-confirm">
+        <div class="confirm-icon">📋</div>
+        <div class="confirm-title">Gönderime Hazır</div>
+        <div class="confirm-info"><b id="confirm-count">0</b> müşteriye mesaj gönderilecek</div>
+        <div class="confirm-msg-preview" id="confirm-msg-preview"></div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn-ghost" id="bulk-back">Geri</button>
+    <button class="btn-primary" id="bulk-next">Devam Et →</button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

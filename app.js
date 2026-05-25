@@ -76,6 +76,10 @@ let state = {
   bulkStep: 1,
   bulkSelected: new Set(),
   bulkMessage: '',
+  // Yüklenen veriler (cache)
+  customers: [],
+  offers: [],
+  activities: [],
   // Session
   sessionActive: false,
   sessionSeconds: 0,
@@ -260,7 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Bulk select all
   document.getElementById('bulk-select-all').addEventListener('change', (e) => {
-    const customers = state.isDemoMode ? DEMO_CUSTOMERS : [];
+    const customers = state.isDemoMode ? DEMO_CUSTOMERS : state.customers;
     customers.forEach(c => {
       if (e.target.checked) state.bulkSelected.add(c.id);
       else state.bulkSelected.delete(c.id);
@@ -409,6 +413,11 @@ async function renderDashboard() {
   const offers     = state.isDemoMode ? DEMO_OFFERS     : await fetchOffers();
   const customers  = state.isDemoMode ? DEMO_CUSTOMERS  : await fetchCustomers();
 
+  // State'e cache'le — session kartı ve diğer yerler buradan okur
+  state.customers   = customers;
+  state.offers      = offers;
+  state.activities  = activities;
+
   const completed = activities.filter(a => a.status === 'completed');
   const calls     = completed.filter(a => a.activity_type === 'call').length;
   const wa        = completed.filter(a => a.activity_type === 'whatsapp').length;
@@ -515,6 +524,7 @@ function renderCallFeedItem(c) {
 ────────────────────────────────────────────── */
 async function renderCustomers(search = document.getElementById('customer-search').value) {
   const all = state.isDemoMode ? DEMO_CUSTOMERS : await fetchCustomers();
+  state.customers = all; // cache'le
   let items = all;
   if (state.customerFilter) items = items.filter(c => c.status === state.customerFilter);
   if (search) {
@@ -875,7 +885,7 @@ async function startBulkSend() {
 
 function renderBulkCustomerList() {
   const statusFilter = document.getElementById('bulk-status-filter').value;
-  const customers = (state.isDemoMode ? DEMO_CUSTOMERS : [])
+  const customers = (state.isDemoMode ? DEMO_CUSTOMERS : state.customers)
     .filter(c => !statusFilter || c.status === statusFilter);
 
   const list = document.getElementById('bulk-customer-list');
@@ -932,10 +942,13 @@ function getSessionDuration() {
 }
 
 function startSession() {
-  const all = state.isDemoMode ? DEMO_CUSTOMERS : [];
+  // Demo modda DEMO_CUSTOMERS, gerçek modda state.customers cache'ini kullan
+  const all = state.isDemoMode ? DEMO_CUSTOMERS : state.customers;
   state.sessionCustomers = all.filter(c =>
-    ['new','to_call','unreachable','call_later','contacted'].includes(c.status)
+    ['new','to_call','unreachable','call_later','contacted', 'new'].includes(c.status)
   );
+  // Hiç müşteri yoksa hepsini al (yeni import edilmiş olabilir)
+  if (state.sessionCustomers.length === 0) state.sessionCustomers = [...all];
   state.sessionActive   = true;
   state.sessionSeconds  = getSessionDuration(); // countdown from chosen duration
   state.sessionDone     = 0;

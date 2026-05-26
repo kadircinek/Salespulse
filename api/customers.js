@@ -17,8 +17,19 @@ module.exports = async (req, res) => {
     // ── GET ──────────────────────────────────────────────
     if (req.method === 'GET') {
       const rows = await sql`
-        SELECT * FROM customers
-        ORDER BY fit_score DESC NULLS LAST, updated_at DESC
+        SELECT c.*,
+          u.name as assigned_user_name
+        FROM customers c
+        LEFT JOIN users u ON u.id = c.assigned_user_id
+        ORDER BY
+          CASE WHEN c.status = 'new' AND c.last_contacted IS NULL THEN 0
+               WHEN c.follow_up_date <= CURRENT_DATE AND c.follow_up_date IS NOT NULL THEN 1
+               WHEN c.status = 'to_call' THEN 2
+               WHEN c.status = 'call_later' THEN 3
+               ELSE 4
+          END ASC,
+          c.fit_score DESC NULLS LAST,
+          c.created_at DESC
       `;
       return res.json(rows);
     }
@@ -54,25 +65,27 @@ module.exports = async (req, res) => {
       const {
         company_name, contact_name, phone, email, sector,
         city, status, notes, fit_score, linkedin_url, title,
-        confidence, last_contacted,
+        confidence, last_contacted, follow_up_date, assigned_user_id,
       } = req.body || {};
 
       const rows = await sql`
         UPDATE customers SET
-          company_name   = COALESCE(${company_name},   company_name),
-          contact_name   = COALESCE(${contact_name},   contact_name),
-          phone          = COALESCE(${phone},           phone),
-          email          = COALESCE(${email},           email),
-          sector         = COALESCE(${sector},          sector),
-          city           = COALESCE(${city},            city),
-          status         = COALESCE(${status},          status),
-          notes          = COALESCE(${notes},           notes),
-          fit_score      = COALESCE(${fit_score},       fit_score),
-          linkedin_url   = COALESCE(${linkedin_url},    linkedin_url),
-          title          = COALESCE(${title},           title),
-          confidence     = COALESCE(${confidence},      confidence),
-          last_contacted = COALESCE(${last_contacted},  last_contacted),
-          updated_at     = NOW()
+          company_name     = COALESCE(${company_name},     company_name),
+          contact_name     = COALESCE(${contact_name},     contact_name),
+          phone            = COALESCE(${phone},             phone),
+          email            = COALESCE(${email},             email),
+          sector           = COALESCE(${sector},            sector),
+          city             = COALESCE(${city},              city),
+          status           = COALESCE(${status},            status),
+          notes            = COALESCE(${notes},             notes),
+          fit_score        = COALESCE(${fit_score},         fit_score),
+          linkedin_url     = COALESCE(${linkedin_url},      linkedin_url),
+          title            = COALESCE(${title},             title),
+          confidence       = COALESCE(${confidence},        confidence),
+          last_contacted   = COALESCE(${last_contacted},    last_contacted),
+          follow_up_date   = COALESCE(${follow_up_date || null},  follow_up_date),
+          assigned_user_id = COALESCE(${assigned_user_id || null}, assigned_user_id),
+          updated_at       = NOW()
         WHERE id = ${id}
         RETURNING *
       `;

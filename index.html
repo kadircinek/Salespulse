@@ -100,10 +100,15 @@
       <a class="sb-item" data-page="customers" href="#">
         <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
         <span>Müşteriler</span>
+        <div class="sb-badge" id="sb-badge-customers"></div>
       </a>
       <a class="sb-item" data-page="offers" href="#">
         <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
         <span>Teklifler</span>
+      </a>
+      <a class="sb-item" data-page="performance" href="#">
+        <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span>Performans</span>
       </a>
       <a class="sb-item" data-page="campaigns" href="#">
         <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2L15 22 11 13 2 9l20-7z"/></svg>
@@ -126,6 +131,16 @@
 
   <!-- Main -->
   <div class="app-main">
+
+    <!-- Yeni Müşteri Bildirim Banneri (Feature 1) -->
+    <div class="new-customers-banner hidden" id="new-customers-banner">
+      <div class="ncb-inner">
+        <span class="ncb-icon">🆕</span>
+        <span class="ncb-text" id="ncb-text">Yeni müşteriler eklendi!</span>
+        <button class="ncb-action" id="ncb-action">Hemen Ara →</button>
+        <button class="ncb-close" id="ncb-close">✕</button>
+      </div>
+    </div>
 
     <!-- Top bar -->
     <header class="topbar">
@@ -204,6 +219,21 @@
               <div class="session-customer-name" id="session-customer-name">–</div>
               <div class="session-customer-phone" id="session-customer-phone">–</div>
             </div>
+            <!-- Feature 9: WhatsApp / Mail / Ara kısayolları -->
+            <div class="session-quick-actions" id="session-quick-actions">
+              <a class="sq-btn sq-call" id="sq-call" href="#" title="Ara">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.06 1.18 2 2 0 012.03 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006.29 6.29l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+                Ara
+              </a>
+              <a class="sq-btn sq-wa" id="sq-wa" href="#" target="_blank" title="WhatsApp">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.998 0C5.373 0 0 5.373 0 12c0 2.126.554 4.122 1.523 5.858L.054 23.276a.5.5 0 00.611.639l5.565-1.456A11.945 11.945 0 0011.998 24C18.625 24 24 18.627 24 12S18.625 0 11.998 0zm0 21.818a9.823 9.823 0 01-5.001-1.368l-.358-.213-3.708.972.988-3.613-.233-.372A9.816 9.816 0 012.181 12c0-5.418 4.399-9.818 9.817-9.818 5.418 0 9.818 4.4 9.818 9.818 0 5.419-4.4 9.818-9.818 9.818z"/></svg>
+                WhatsApp
+              </a>
+              <a class="sq-btn sq-mail" id="sq-mail" href="#" title="Mail">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                Mail
+              </a>
+            </div>
           </div>
 
           <!-- Sonuç + Not (müşteri aktifken göster) -->
@@ -214,6 +244,17 @@
               <button class="result-btn" data-result="ulaşılamadı">📵 Ulaşılamadı</button>
               <button class="result-btn" data-result="ziyaret_planlandı">📅 Ziyaret Planlandı</button>
               <button class="result-btn" data-result="takip_gerekiyor">🔄 Takip Gerekiyor</button>
+            </div>
+            <!-- Feature 2: Takip tarihi seçici (Takip Gerekiyor seçilince görünür) -->
+            <div class="followup-picker hidden" id="followup-picker">
+              <div class="followup-label">📅 Tekrar Arama Tarihi:</div>
+              <div class="followup-options">
+                <button class="fu-btn" data-days="1">Yarın</button>
+                <button class="fu-btn" data-days="3">3 Gün</button>
+                <button class="fu-btn" data-days="7">1 Hafta</button>
+                <button class="fu-btn" data-days="14">2 Hafta</button>
+                <input type="date" id="followup-custom-date" class="fu-date-input" title="Özel tarih"/>
+              </div>
             </div>
             <textarea
               id="session-note"
@@ -429,6 +470,60 @@
         </div>
       </div>
 
+      <!-- ─── PERFORMANCE ─── -->
+      <div id="page-performance" class="page hidden">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Performans</h1>
+            <p class="page-desc">Günlük ve haftalık arama istatistikleri</p>
+          </div>
+          <button class="btn-primary" id="quick-add-btn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Hızlı Müşteri Ekle
+          </button>
+        </div>
+        <!-- Günlük Hedef (Feature 8) -->
+        <div class="perf-target-card" id="perf-target-card">
+          <div class="ptc-left">
+            <div class="ptc-emoji" id="ptc-emoji">🎯</div>
+            <div>
+              <div class="ptc-title" id="ptc-title">Bugünkü Hedef</div>
+              <div class="ptc-sub" id="ptc-sub">Yükleniyor…</div>
+            </div>
+          </div>
+          <div class="ptc-right">
+            <div class="ptc-progress-wrap">
+              <div class="ptc-bar"><div class="ptc-bar-fill" id="ptc-bar-fill"></div></div>
+              <div class="ptc-pct" id="ptc-pct">0%</div>
+            </div>
+            <div class="ptc-nums"><span id="ptc-done">0</span> / <span id="ptc-target">20</span></div>
+          </div>
+        </div>
+        <!-- Sonuç Dağılımı -->
+        <div class="perf-grid">
+          <div class="perf-card">
+            <div class="perf-card-title">Bugünkü Sonuçlar</div>
+            <div id="perf-results-list" class="perf-results-list"></div>
+          </div>
+          <div class="perf-card">
+            <div class="perf-card-title">Haftalık Trendler</div>
+            <div id="perf-weekly-chart" class="perf-weekly-chart"></div>
+          </div>
+          <div class="perf-card perf-card-full">
+            <div class="perf-card-title">Ekip Sıralaması — Bugün</div>
+            <div id="perf-team-list" class="perf-team-list"></div>
+          </div>
+        </div>
+        <!-- Takip Gerekli Müşteriler -->
+        <div class="perf-followup-section" id="perf-followup-section">
+          <div class="perf-card-title">
+            ⏰ Bugün Takip Edilmesi Gereken Müşteriler
+            <span class="pill pill-orange" id="perf-followup-count">0</span>
+          </div>
+          <div id="perf-followup-list" class="perf-followup-list"></div>
+        </div>
+      </div>
+
       <!-- ─── CAMPAIGNS ─── -->
       <div id="page-campaigns" class="page hidden">
         <div class="page-header">
@@ -544,6 +639,61 @@
   <div class="modal-footer">
     <button class="btn-ghost" id="bulk-back">Geri</button>
     <button class="btn-primary" id="bulk-next">Devam Et →</button>
+  </div>
+</div>
+
+<!-- ═══ QUICK ADD MODAL (Feature 7) ═══ -->
+<div id="quick-add-backdrop" class="modal-backdrop hidden"></div>
+<div id="quick-add-modal" class="modal hidden">
+  <div class="modal-header">
+    <h2>⚡ Hızlı Müşteri Ekle</h2>
+    <button class="modal-close" id="quick-add-close">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="modal-body" style="padding:24px">
+    <div id="quick-add-success" class="qa-success hidden">
+      <div class="qa-success-icon">✅</div>
+      <div class="qa-success-title">Müşteri Eklendi!</div>
+      <div class="qa-success-sub" id="qa-success-name"></div>
+      <button class="btn-primary" id="qa-add-another" style="margin-top:16px">Başka Müşteri Ekle</button>
+    </div>
+    <div id="quick-add-form-wrap">
+      <div class="qa-form-grid">
+        <div class="field">
+          <label class="field-label">Firma Adı <span style="color:#EF4444">*</span></label>
+          <input id="qa-company" type="text" class="qa-input" placeholder="Örn: Anadolu Metal Sanayi"/>
+        </div>
+        <div class="field">
+          <label class="field-label">Sektör</label>
+          <input id="qa-sector" type="text" class="qa-input" placeholder="Örn: Metal, Plastik, Gıda…"/>
+        </div>
+        <div class="field">
+          <label class="field-label">Yetkili Kişi</label>
+          <input id="qa-contact" type="text" class="qa-input" placeholder="Ad Soyad"/>
+        </div>
+        <div class="field">
+          <label class="field-label">Telefon</label>
+          <input id="qa-phone" type="tel" class="qa-input" placeholder="+90 5XX XXX XX XX"/>
+        </div>
+        <div class="field">
+          <label class="field-label">E-posta</label>
+          <input id="qa-email" type="email" class="qa-input" placeholder="ornek@firma.com"/>
+        </div>
+        <div class="field">
+          <label class="field-label">Şehir</label>
+          <input id="qa-city" type="text" class="qa-input" placeholder="İstanbul, Ankara…"/>
+        </div>
+      </div>
+      <div id="quick-add-error" class="alert-error hidden" style="margin:12px 0"></div>
+    </div>
+  </div>
+  <div class="modal-footer" id="qa-footer">
+    <button class="btn-ghost" id="quick-add-cancel">İptal</button>
+    <button class="btn-primary" id="quick-add-submit">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Kaydet
+    </button>
   </div>
 </div>
 

@@ -80,6 +80,8 @@ let state = {
   customers: [],
   offers: [],
   activities: [],
+  users: [],
+  stats: null,
   // Session
   sessionActive: false,
   sessionSeconds: 0,
@@ -88,6 +90,9 @@ let state = {
   sessionCustomers: [],
   sessionInterval: null,
   sessionResult: null,
+  sessionFollowUpDate: null,
+  // Bildirim
+  newCustomersBannerShown: false,
 };
 
 /* ──────────────────────────────────────────────
@@ -160,6 +165,31 @@ function formatDate(dateStr) {
   if (!dateStr) return '-';
   const d = new Date(dateStr);
   return d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+}
+
+function formatWhatsApp(phone) {
+  if (!phone) return '';
+  let p = phone.replace(/\s|\-|\(|\)/g, '');
+  if (p.startsWith('+')) p = p.slice(1);
+  if (p.startsWith('0')) p = '90' + p.slice(1);
+  if (!p.startsWith('90') && p.length === 10) p = '90' + p;
+  return p;
+}
+
+function addDays(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
+function motivationMessage(done, target) {
+  const pct = target > 0 ? Math.round((done/target)*100) : 0;
+  if (done === 0)        return { emoji: '🎯', msg: `Haydi başla! Hedef: ${target} arama` };
+  if (pct < 25)         return { emoji: '💪', msg: `İyi başlangıç! ${target - done} arama kaldı` };
+  if (pct < 50)         return { emoji: '🔥', msg: `Harika gidiyor! Devam et` };
+  if (pct < 75)         return { emoji: '⚡', msg: `Yarısını geçtin, ${target - done} tane daha!` };
+  if (pct < 100)        return { emoji: '🚀', msg: `Neredeyse bitti! Sadece ${target - done} kaldı` };
+  return                       { emoji: '🏆', msg: `Günlük hedefe ulaştın! Muhteşem!` };
 }
 
 /* ──────────────────────────────────────────────
@@ -254,6 +284,21 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.classList.add('selected');
     state.sessionResult = btn.dataset.result;
     document.getElementById('session-save-btn').disabled = false;
+
+    // Feature 2: Takip tarihi picker'ı göster/gizle
+    const picker = document.getElementById('followup-picker');
+    if (state.sessionResult === 'takip_gerekiyor') {
+      picker.classList.remove('hidden');
+      // Default: 3 gün seç
+      state.sessionFollowUpDate = addDays(3);
+      document.getElementById('followup-custom-date').value = state.sessionFollowUpDate;
+      document.querySelectorAll('.fu-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.days === '3');
+      });
+    } else {
+      picker.classList.add('hidden');
+      state.sessionFollowUpDate = null;
+    }
   });
 
   // Bulk message modal
@@ -303,6 +348,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Message textarea live preview
   document.getElementById('bulk-message').addEventListener('input', updateBulkPreview);
+
+  // ── Yeni müşteri banner (Feature 1) ──
+  document.getElementById('ncb-close').addEventListener('click', () => {
+    document.getElementById('new-customers-banner').classList.add('hidden');
+  });
+  document.getElementById('ncb-action').addEventListener('click', () => {
+    document.getElementById('new-customers-banner').classList.add('hidden');
+    navigateTo('calls');
+  });
+
+  // ── Takip tarihi (Feature 2) ──
+  document.getElementById('followup-picker').addEventListener('click', (e) => {
+    const btn = e.target.closest('.fu-btn');
+    if (!btn) return;
+    document.querySelectorAll('.fu-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.sessionFollowUpDate = addDays(parseInt(btn.dataset.days));
+    document.getElementById('followup-custom-date').value = state.sessionFollowUpDate;
+  });
+  document.getElementById('followup-custom-date').addEventListener('change', (e) => {
+    if (e.target.value) {
+      document.querySelectorAll('.fu-btn').forEach(b => b.classList.remove('active'));
+      state.sessionFollowUpDate = e.target.value;
+    }
+  });
+
+  // ── Quick add modal (Feature 7) ──
+  document.getElementById('quick-add-btn').addEventListener('click', openQuickAdd);
+  document.getElementById('quick-add-close').addEventListener('click', closeQuickAdd);
+  document.getElementById('quick-add-cancel').addEventListener('click', closeQuickAdd);
+  document.getElementById('quick-add-backdrop').addEventListener('click', closeQuickAdd);
+  document.getElementById('quick-add-submit').addEventListener('click', submitQuickAdd);
+  document.getElementById('qa-add-another').addEventListener('click', resetQuickAdd);
 
   // ── Oturum devam kontrolü (tüm listener'lar kurulduktan SONRA) ──
   const savedToken = localStorage.getItem('sp_token');
@@ -379,6 +457,11 @@ function enterApp() {
   document.getElementById('app-screen').classList.remove('hidden');
   document.getElementById('app-screen').classList.add('active');
 
+  // Kullanıcıları yükle (temsilci atama için)
+  if (!state.isDemoMode) {
+    fetchUsers().then(users => { state.users = users; });
+  }
+
   navigateTo('dashboard');
 }
 
@@ -386,11 +469,12 @@ function enterApp() {
    Navigation
 ────────────────────────────────────────────── */
 const PAGE_TITLES = {
-  dashboard: 'Dashboard',
-  calls:     'Günlük Aramalar',
-  customers: 'Müşteriler',
-  offers:    'Teklifler',
-  campaigns: 'Kampanyalar',
+  dashboard:   'Dashboard',
+  calls:       'Günlük Aramalar',
+  customers:   'Müşteriler',
+  offers:      'Teklifler',
+  performance: 'Performans',
+  campaigns:   'Kampanyalar',
 };
 
 function navigateTo(page) {
@@ -408,11 +492,12 @@ function navigateTo(page) {
 
   document.getElementById('topbar-title').textContent = PAGE_TITLES[page] || page;
 
-  if (page === 'dashboard') renderDashboard();
-  else if (page === 'customers') renderCustomers();
-  else if (page === 'offers')    renderOffers();
-  else if (page === 'calls')     renderCalls();
-  else if (page === 'campaigns') renderCampaigns();
+  if (page === 'dashboard')    renderDashboard();
+  else if (page === 'customers')   renderCustomers();
+  else if (page === 'offers')      renderOffers();
+  else if (page === 'calls')       renderCalls();
+  else if (page === 'performance') renderPerformance();
+  else if (page === 'campaigns')   renderCampaigns();
 }
 
 /* ──────────────────────────────────────────────
@@ -425,31 +510,50 @@ async function renderDashboard() {
   const offers     = state.isDemoMode ? DEMO_OFFERS     : await fetchOffers();
   const customers  = state.isDemoMode ? DEMO_CUSTOMERS  : await fetchCustomers();
 
-  // State'e cache'le — session kartı ve diğer yerler buradan okur
-  state.customers   = customers;
-  state.offers      = offers;
-  state.activities  = activities;
+  // State'e cache'le
+  state.customers  = customers;
+  state.offers     = offers;
+  state.activities = activities;
+
+  // Feature 1: Yeni müşteri bildirimi
+  if (!state.isDemoMode) checkNewCustomers(customers);
 
   const completed = activities.filter(a => a.status === 'completed');
-  const calls     = completed.filter(a => a.activity_type === 'call').length;
-  const wa        = completed.filter(a => a.activity_type === 'whatsapp').length;
-  const email     = completed.filter(a => a.activity_type === 'email').length;
+  // Gerçek modda bugünkü aktiviteler API'den gelir
+  const todayActs = state.isDemoMode
+    ? completed
+    : activities.filter(a => {
+        const d = new Date(a.created_at);
+        const today = new Date();
+        return d.toDateString() === today.toDateString();
+      });
+
+  const calls = todayActs.filter(a => a.result !== undefined).length || completed.filter(a => a.activity_type === 'call').length;
+  const wa    = completed.filter(a => a.activity_type === 'whatsapp').length;
+  const email = completed.filter(a => a.activity_type === 'email').length;
 
   const dueOffers = offers.filter(o => ['sent','viewed','followup_pending','negotiating'].includes(o.status));
   const overdue   = activities.filter(a => a.status === 'overdue');
   const pending   = activities.filter(a => a.status === 'pending');
   const callList  = customers.filter(c => ['new','to_call','unreachable','call_later'].includes(c.status));
 
-  const DAILY_GOAL = 20;
+  // Feature 8: Günlük hedef
+  const DAILY_GOAL = state.currentUser?.daily_target || 20;
+  const todayCallCount = state.isDemoMode ? calls : activities.length;
 
   // KPI values
-  document.getElementById('kpi-calls').textContent  = calls;
+  document.getElementById('kpi-calls').textContent  = state.isDemoMode ? calls : todayCallCount;
   document.getElementById('kpi-wa').textContent     = wa;
   document.getElementById('kpi-email').textContent  = email;
   document.getElementById('kpi-offers').textContent = dueOffers.length;
 
+  // Update KPI sub label with target progress
+  const callsCard = document.getElementById('kpi-calls').closest('.kpi-card');
+  const subEl = callsCard.querySelector('.kpi-sub');
+  if (subEl) subEl.textContent = `Hedef: ${DAILY_GOAL}`;
+
   // KPI bars
-  setBar('kpi-calls',  calls,             DAILY_GOAL,  '#3B82F6');
+  setBar('kpi-calls',  state.isDemoMode ? calls : todayCallCount, DAILY_GOAL,  '#3B82F6');
   setBar('kpi-wa',     wa,                10,           '#22C55E');
   setBar('kpi-email',  email,             10,           '#F97316');
   setBar('kpi-offers', dueOffers.length,  10,           '#A855F7');
@@ -459,11 +563,42 @@ async function renderDashboard() {
   document.getElementById('d-overdue-count').textContent = overdue.length;
   document.getElementById('d-pending-count').textContent = pending.length;
 
+  // Feature 3: Takip tarihi geçmiş müşteriler için badge
+  const overdueFollowups = customers.filter(c => {
+    if (!c.follow_up_date) return false;
+    return new Date(c.follow_up_date) <= new Date();
+  });
+  if (overdueFollowups.length > 0) {
+    const badge = document.getElementById('sb-badge-calls');
+    if (badge) { badge.textContent = overdueFollowups.length; badge.style.display = 'flex'; }
+  }
+
   // Feed lists
   renderFeed('d-offers-list',  dueOffers, renderOfferFeedItem,   'Takip edilecek teklif yok');
   renderFeed('d-overdue-list', overdue,   renderActivityFeedItem,'Geciken görev yok');
   renderFeed('d-pending-list', pending,   renderActivityFeedItem,'Bekleyen takip yok');
   renderFeed('d-calls-list',   callList.slice(0,5), renderCallFeedItem, 'Aranacak müşteri yok');
+}
+
+// Feature 1: Yeni müşteri bildirimi
+function checkNewCustomers(customers) {
+  if (state.newCustomersBannerShown) return;
+  const lastSeen  = parseInt(localStorage.getItem('sp_last_customer_check') || '0');
+  const now       = Date.now();
+  const cutoff    = new Date(lastSeen || now - 24 * 3600 * 1000);
+  const newOnes   = customers.filter(c => c.created_at && new Date(c.created_at) > cutoff);
+
+  if (newOnes.length > 0 && lastSeen > 0) {
+    document.getElementById('ncb-text').textContent =
+      `🆕 ${newOnes.length} yeni müşteri eklendi! Hemen arayabilirsiniz.`;
+    document.getElementById('new-customers-banner').classList.remove('hidden');
+    state.newCustomersBannerShown = true;
+
+    // Sidebar badge
+    const badge = document.getElementById('sb-badge-customers');
+    if (badge) { badge.textContent = newOnes.length; badge.style.display = 'flex'; }
+  }
+  localStorage.setItem('sp_last_customer_check', now.toString());
 }
 
 function setBar(kpiId, val, max, color) {
@@ -731,62 +866,142 @@ async function renderCampaigns() {
 }
 
 /* ──────────────────────────────────────────────
-   Customer Detail Drawer
+   Customer Detail Drawer (Feature 4, 6, 9)
 ────────────────────────────────────────────── */
-function showCustomerDrawer(id) {
-  const c = DEMO_CUSTOMERS.find(x => x.id === id);
+async function showCustomerDrawer(id) {
+  const all = state.isDemoMode ? DEMO_CUSTOMERS : state.customers;
+  const c   = all.find(x => x.id === id);
   if (!c) return;
 
-  const cfg = STATUS_CONFIG[c.status] || STATUS_CONFIG.new;
+  const cfg      = STATUS_CONFIG[c.status] || STATUS_CONFIG.new;
   const initials = c.company_name.substring(0,2).toUpperCase();
 
-  document.getElementById('drawer-avatar').textContent = initials;
-  document.getElementById('drawer-avatar').style.background = cfg.bg;
-  document.getElementById('drawer-avatar').style.color = cfg.color;
-  document.getElementById('drawer-company').textContent = c.company_name;
-  document.getElementById('drawer-contact').textContent = c.contact_name;
+  document.getElementById('drawer-avatar').textContent       = initials;
+  document.getElementById('drawer-avatar').style.background  = cfg.bg;
+  document.getElementById('drawer-avatar').style.color       = cfg.color;
+  document.getElementById('drawer-company').textContent      = c.company_name;
+  document.getElementById('drawer-contact').textContent      = c.contact_name || '-';
+
+  // Show drawer immediately with loading state
+  document.getElementById('drawer-body').innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-tertiary)">Yükleniyor…</div>';
+  document.getElementById('drawer-backdrop').classList.remove('hidden');
+  document.getElementById('customer-drawer').classList.remove('hidden');
+
+  // Fetch activities (Feature 6: Zaman çizelgesi)
+  let custActivities = [];
+  if (!state.isDemoMode && c.id) {
+    try { custActivities = await apiFetch(`/api/activities?customer_id=${c.id}`); }
+    catch { custActivities = []; }
+  } else {
+    custActivities = DEMO_ACTIVITIES.filter(a => a.customer_id === id);
+  }
 
   // Related offers
-  const custOffers = DEMO_OFFERS.filter(o => o.customer_id === id);
+  const custOffers = state.isDemoMode
+    ? DEMO_OFFERS.filter(o => o.customer_id === id)
+    : state.offers.filter(o => o.customer_id === id);
+
   const offersHtml = custOffers.length
     ? custOffers.map(o => `
         <div class="drawer-row">
           <span class="drawer-row-label">${o.offer_number}</span>
           <div style="display:flex;align-items:center;gap:8px">
-            <span>${currencySymbol(o.currency)}${o.total_amount.toLocaleString()}</span>
+            <span>${currencySymbol(o.currency)}${Number(o.total_amount).toLocaleString()}</span>
             ${statusPill(o.status, OFFER_STATUS)}
           </div>
         </div>`).join('')
     : '<div style="color:var(--text-tertiary);font-size:13px;padding:4px 0">Teklif yok</div>';
 
-  document.getElementById('drawer-body').innerHTML = `
+  // Feature 6: Aktivite zaman çizelgesi
+  const timelineHtml = custActivities.length
+    ? `<div class="timeline">${custActivities.map(a => {
+        const resultLabels = {
+          'görüşüldü':'✅ Görüşüldü','mail_atıldı':'📧 Mail Atıldı',
+          'ulaşılamadı':'📵 Ulaşılamadı','ziyaret_planlandı':'📅 Ziyaret Planlandı',
+          'takip_gerekiyor':'🔄 Takip Gerekiyor'
+        };
+        const resultLabel = resultLabels[a.result] || a.result || '–';
+        const who = a.created_by_name ? `· ${a.created_by_name}` : '';
+        return `
+          <div class="tl-item">
+            <div class="tl-dot"></div>
+            <div class="tl-content">
+              <div class="tl-result">${resultLabel}</div>
+              ${a.note ? `<div class="tl-note">${a.note}</div>` : ''}
+              <div class="tl-meta">${formatDate(a.created_at)} ${who}</div>
+            </div>
+          </div>`;
+      }).join('')}</div>`
+    : '<div style="color:var(--text-tertiary);font-size:13px;padding:4px 0">Henüz görüşme kaydı yok</div>';
+
+  // Feature 4: Temsilci atama dropdown
+  const usersOptions = state.users.map(u =>
+    `<option value="${u.id}" ${c.assigned_user_id === u.id ? 'selected' : ''}>${u.name}</option>`
+  ).join('');
+  const assignHtml = state.isDemoMode ? '' : `
     <div class="drawer-section">
-      <div class="drawer-section-title">İletişim</div>
-      <div class="drawer-row"><span class="drawer-row-label">Telefon</span><span class="drawer-row-value">${c.phone||'-'}</span></div>
-      <div class="drawer-row"><span class="drawer-row-label">E-posta</span><span class="drawer-row-value" style="font-size:12px">${c.email||'-'}</span></div>
-      <div class="drawer-row"><span class="drawer-row-label">WhatsApp</span><span class="drawer-row-value">${c.phone||'-'}</span></div>
-    </div>
+      <div class="drawer-section-title">Temsilci Atama</div>
+      <div class="drawer-row">
+        <span class="drawer-row-label">Atanan</span>
+        <select class="drawer-select" id="drawer-assign-select" onchange="assignCustomer('${c.id}', this.value)">
+          <option value="">— Atanmamış —</option>
+          ${usersOptions}
+        </select>
+      </div>
+      ${c.follow_up_date ? `<div class="drawer-row"><span class="drawer-row-label">Takip Tarihi</span><span class="drawer-row-value followup-badge">📅 ${formatDate(c.follow_up_date)}</span></div>` : ''}
+    </div>`;
+
+  // Feature 9: WhatsApp / Ara / Mail butonları
+  const waNum = c.phone ? formatWhatsApp(c.phone) : '';
+  const contactBtns = `
+    <div class="drawer-section" style="display:flex;gap:8px;flex-wrap:wrap">
+      ${c.phone ? `
+        <a href="tel:${c.phone.replace(/\s/g,'')}" class="btn-primary" style="font-size:12px;padding:7px 14px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.06 1.18 2 2 0 012.03 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006.29 6.29l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+          Ara
+        </a>
+        <a href="https://wa.me/${waNum}" target="_blank" class="btn-wa" style="font-size:12px;padding:7px 14px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.998 0C5.373 0 0 5.373 0 12c0 2.126.554 4.122 1.523 5.858L.054 23.276a.5.5 0 00.611.639l5.565-1.456A11.945 11.945 0 0011.998 24C18.625 24 24 18.627 24 12S18.625 0 11.998 0zm0 21.818a9.823 9.823 0 01-5.001-1.368l-.358-.213-3.708.972.988-3.613-.233-.372A9.816 9.816 0 012.181 12c0-5.418 4.399-9.818 9.817-9.818 5.418 0 9.818 4.4 9.818 9.818 0 5.419-4.4 9.818-9.818 9.818z"/></svg>
+          WhatsApp
+        </a>` : ''}
+      ${c.email ? `<a href="mailto:${c.email}" class="btn-ghost" style="font-size:12px;padding:7px 14px">📧 Mail</a>` : ''}
+    </div>`;
+
+  document.getElementById('drawer-body').innerHTML = `
+    ${contactBtns}
+    ${assignHtml}
     <div class="drawer-section">
       <div class="drawer-section-title">Bilgiler</div>
       <div class="drawer-row"><span class="drawer-row-label">Durum</span><span>${statusPill(c.status, STATUS_CONFIG)}</span></div>
       <div class="drawer-row"><span class="drawer-row-label">Sektör</span><span class="drawer-row-value">${c.sector||'-'}</span></div>
       <div class="drawer-row"><span class="drawer-row-label">Şehir</span><span class="drawer-row-value">${c.city||'-'}</span></div>
       <div class="drawer-row"><span class="drawer-row-label">Son Görüşme</span><span class="drawer-row-value">${timeAgo(c.last_contacted)}</span></div>
+      ${c.website ? `<div class="drawer-row"><span class="drawer-row-label">Web</span><a href="${c.website}" target="_blank" class="drawer-row-value" style="color:var(--accent);font-size:12px">${c.website}</a></div>` : ''}
     </div>
     <div class="drawer-section">
       <div class="drawer-section-title">Teklifler (${custOffers.length})</div>
       ${offersHtml}
     </div>
-    <div class="drawer-section" style="display:flex;gap:8px;flex-wrap:wrap">
-      ${c.phone ? `<a href="tel:${c.phone.replace(/\s/g,'')}" class="btn-primary" style="font-size:12px;padding:7px 14px">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.06 1.18 2 2 0 012.03 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006.29 6.29l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-        Ara
-      </a>` : ''}
-      ${c.email ? `<a href="mailto:${c.email}" class="btn-ghost" style="font-size:12px;padding:7px 14px">E-posta</a>` : ''}
+    <div class="drawer-section">
+      <div class="drawer-section-title">Görüşme Geçmişi (${custActivities.length})</div>
+      ${timelineHtml}
     </div>`;
+}
 
-  document.getElementById('drawer-backdrop').classList.remove('hidden');
-  document.getElementById('customer-drawer').classList.remove('hidden');
+// Feature 4: Temsilci atama
+async function assignCustomer(customerId, userId) {
+  try {
+    await apiFetch(`/api/customers?id=${customerId}`, {
+      method: 'PUT',
+      body: { assigned_user_id: userId || null },
+    });
+    const idx = state.customers.findIndex(c => c.id === customerId);
+    if (idx !== -1) {
+      state.customers[idx].assigned_user_id = userId || null;
+      const user = state.users.find(u => u.id === userId);
+      state.customers[idx].assigned_user_name = user?.name || null;
+    }
+  } catch (e) { console.error('Atama hatası:', e); }
 }
 
 function closeDrawer() {
@@ -956,10 +1171,28 @@ function getSessionDuration() {
 function startSession() {
   // Demo modda DEMO_CUSTOMERS, gerçek modda state.customers cache'ini kullan
   const all = state.isDemoMode ? DEMO_CUSTOMERS : state.customers;
-  state.sessionCustomers = all.filter(c =>
-    ['new','to_call','unreachable','call_later','contacted', 'new'].includes(c.status)
+
+  // Feature 3: Öncelikli kuyruk sıralaması
+  const today = new Date().toISOString().split('T')[0];
+  const callable = all.filter(c =>
+    ['new','to_call','unreachable','call_later','contacted'].includes(c.status)
   );
-  // Hiç müşteri yoksa hepsini al (yeni import edilmiş olabilir)
+
+  callable.sort((a, b) => {
+    const priorityOf = (c) => {
+      if (c.status === 'new' && !c.last_contacted) return 0; // Hiç aranmamış
+      if (c.follow_up_date && c.follow_up_date <= today)     return 1; // Takip vakti geldi
+      if (c.status === 'to_call')                            return 2;
+      if (c.status === 'call_later')                         return 3;
+      return 4;
+    };
+    const pa = priorityOf(a), pb = priorityOf(b);
+    if (pa !== pb) return pa - pb;
+    return (b.fit_score || 0) - (a.fit_score || 0);
+  });
+
+  state.sessionCustomers = callable;
+  // Hiç müşteri yoksa hepsini al
   if (state.sessionCustomers.length === 0) state.sessionCustomers = [...all];
   state.sessionActive   = true;
   state.sessionSeconds  = getSessionDuration(); // countdown from chosen duration
@@ -1046,9 +1279,13 @@ function stopSession() {
 
 function resetResultPanel() {
   state.sessionResult = null;
+  state.sessionFollowUpDate = null;
   document.querySelectorAll('.result-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('.fu-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('session-note').value = '';
   document.getElementById('session-save-btn').disabled = true;
+  document.getElementById('followup-custom-date').value = '';
+  document.getElementById('followup-picker').classList.add('hidden');
 }
 
 function sessionSkip() {
@@ -1078,9 +1315,15 @@ async function sessionSaveAndNext() {
   // Demo modda sadece UI güncelle, gerçek modda API'ye kaydet
   if (!state.isDemoMode && customer.id) {
     try {
+      // Feature 2: follow_up_date'i de gönder
       await apiFetch('/api/activities', {
         method: 'POST',
-        body: { customer_id: customer.id, result: state.sessionResult, note },
+        body: {
+          customer_id:    customer.id,
+          result:         state.sessionResult,
+          note,
+          follow_up_date: state.sessionFollowUpDate || null,
+        },
       });
       // Cached customer'ı güncelle
       const idx = state.customers.findIndex(c => c.id === customer.id);
@@ -1090,8 +1333,9 @@ async function sessionSaveAndNext() {
           'ziyaret_planlandı': 'contacted', 'takip_gerekiyor': 'call_later',
           'ulaşılamadı': 'unreachable'
         };
-        state.customers[idx].status = statusMap[state.sessionResult] || state.customers[idx].status;
+        state.customers[idx].status         = statusMap[state.sessionResult] || state.customers[idx].status;
         state.customers[idx].last_contacted = new Date().toISOString();
+        state.customers[idx].follow_up_date = state.sessionFollowUpDate || null;
       }
     } catch (e) { console.error('Kayıt hatası:', e); }
   }
@@ -1137,6 +1381,29 @@ function updateSessionCustomer() {
   document.getElementById('session-customer-name').textContent   = c.company_name;
   document.getElementById('session-customer-phone').textContent  =
     (c.contact_name || '') + (c.phone ? ' · ' + c.phone : '');
+
+  // Feature 9: WhatsApp / Call / Mail kısayolları
+  const sqCall = document.getElementById('sq-call');
+  const sqWa   = document.getElementById('sq-wa');
+  const sqMail = document.getElementById('sq-mail');
+
+  if (c.phone) {
+    sqCall.href = `tel:${c.phone.replace(/\s/g,'')}`;
+    sqCall.style.display = 'flex';
+    const wpNum = formatWhatsApp(c.phone);
+    sqWa.href = `https://wa.me/${wpNum}`;
+    sqWa.style.display = 'flex';
+  } else {
+    sqCall.style.display = 'none';
+    sqWa.style.display   = 'none';
+  }
+  if (c.email) {
+    sqMail.href = `mailto:${c.email}`;
+    sqMail.style.display = 'flex';
+  } else {
+    sqMail.style.display = 'none';
+  }
+
   document.getElementById('session-customer').classList.add('visible');
   document.getElementById('session-result-panel').classList.add('visible');
   resetResultPanel();
@@ -1159,6 +1426,221 @@ function playAlertBeeps() {
       osc.stop(ctx.currentTime + delay + 0.15);
     });
   } catch(e) { /* AudioContext not available */ }
+}
+
+/* ──────────────────────────────────────────────
+   Performance Page (Feature 5 + 8)
+────────────────────────────────────────────── */
+async function renderPerformance() {
+  // Demo mod için simüle edilmiş stats
+  let stats;
+  if (state.isDemoMode) {
+    stats = {
+      today: {
+        total: 8, target: 20,
+        byResult: { 'görüşüldü': 3, 'ulaşılamadı': 2, 'mail_atıldı': 2, 'takip_gerekiyor': 1 }
+      },
+      weekly: [
+        { day: '2026-05-20', total: 12 }, { day: '2026-05-21', total: 18 },
+        { day: '2026-05-22', total: 7  }, { day: '2026-05-23', total: 15 },
+        { day: '2026-05-24', total: 0  }, { day: '2026-05-25', total: 0  },
+        { day: '2026-05-26', total: 8  },
+      ],
+      newCustomers24h: 3,
+      overdueFollowups: 2,
+      team: [
+        { name: 'Demo Kullanıcı', call_count: 8, daily_target: 20 },
+      ],
+    };
+  } else {
+    try { stats = await apiFetch('/api/stats'); }
+    catch { stats = null; }
+  }
+
+  if (!stats) {
+    document.getElementById('perf-target-card').innerHTML = '<div style="padding:16px;color:var(--text-tertiary)">Veriler yüklenemedi.</div>';
+    return;
+  }
+
+  // Feature 8: Günlük hedef kartı
+  const done   = stats.today.total;
+  const target = stats.today.target || 20;
+  const pct    = Math.min(100, Math.round((done / target) * 100));
+  const motiv  = motivationMessage(done, target);
+
+  document.getElementById('ptc-emoji').textContent    = motiv.emoji;
+  document.getElementById('ptc-title').textContent    = 'Bugünkü Hedef';
+  document.getElementById('ptc-sub').textContent      = motiv.msg;
+  document.getElementById('ptc-bar-fill').style.width = pct + '%';
+  document.getElementById('ptc-bar-fill').style.background = pct >= 100 ? '#22C55E' : pct >= 50 ? '#3B82F6' : '#F97316';
+  document.getElementById('ptc-pct').textContent      = pct + '%';
+  document.getElementById('ptc-done').textContent     = done;
+  document.getElementById('ptc-target').textContent   = target;
+
+  // Bugünkü sonuç dağılımı
+  const resultEmojis = {
+    'görüşüldü':'✅','mail_atıldı':'📧','ulaşılamadı':'📵',
+    'ziyaret_planlandı':'📅','takip_gerekiyor':'🔄'
+  };
+  const resultLabels = {
+    'görüşüldü':'Görüşüldü','mail_atıldı':'Mail Atıldı','ulaşılamadı':'Ulaşılamadı',
+    'ziyaret_planlandı':'Ziyaret Planlandı','takip_gerekiyor':'Takip Gerekiyor'
+  };
+  const byResult = stats.today.byResult || {};
+  const totalResults = Object.values(byResult).reduce((s,v) => s + v, 0);
+  const resultsHtml = Object.entries(byResult).length
+    ? Object.entries(byResult).map(([key, count]) => {
+        const barPct = totalResults > 0 ? Math.round((count/totalResults)*100) : 0;
+        return `
+          <div class="perf-result-row">
+            <span class="perf-result-label">${resultEmojis[key]||'•'} ${resultLabels[key]||key}</span>
+            <div class="perf-result-bar-wrap">
+              <div class="perf-result-bar" style="width:${barPct}%"></div>
+            </div>
+            <span class="perf-result-count">${count}</span>
+          </div>`;
+      }).join('')
+    : '<div style="color:var(--text-tertiary);font-size:13px">Bugün henüz sonuç kaydedilmedi</div>';
+  document.getElementById('perf-results-list').innerHTML = resultsHtml;
+
+  // Haftalık chart
+  const maxVal = Math.max(...stats.weekly.map(d => d.total), 1);
+  const dayNames = ['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
+  const weeklyHtml = stats.weekly.map(d => {
+    const h    = Math.max(4, Math.round((d.total / maxVal) * 80));
+    const day  = new Date(d.day);
+    const name = dayNames[day.getDay()];
+    const isToday = d.day === new Date().toISOString().split('T')[0];
+    return `
+      <div class="weekly-bar-wrap ${isToday ? 'today' : ''}">
+        <div class="weekly-bar-val">${d.total || ''}</div>
+        <div class="weekly-bar" style="height:${h}px;background:${isToday ? '#3B82F6' : '#CBD5E1'}"></div>
+        <div class="weekly-bar-label">${name}</div>
+      </div>`;
+  }).join('');
+  document.getElementById('perf-weekly-chart').innerHTML = `<div class="weekly-bars">${weeklyHtml}</div>`;
+
+  // Ekip sıralaması
+  const teamHtml = (stats.team || []).map((member, i) => {
+    const memberPct = Math.min(100, Math.round((member.call_count / (member.daily_target||20)) * 100));
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+    return `
+      <div class="team-row">
+        <div class="team-rank">${medal}</div>
+        <div class="team-name">${member.name}</div>
+        <div class="team-bar-wrap">
+          <div class="team-bar-fill" style="width:${memberPct}%;background:${memberPct>=100?'#22C55E':'#3B82F6'}"></div>
+        </div>
+        <div class="team-count">${member.call_count} / ${member.daily_target||20}</div>
+      </div>`;
+  }).join('');
+  document.getElementById('perf-team-list').innerHTML = teamHtml || '<div style="color:var(--text-tertiary);font-size:13px">Ekip verisi yok</div>';
+
+  // Takip gereken müşteriler
+  const today = new Date().toISOString().split('T')[0];
+  const followups = state.customers.filter(c =>
+    c.follow_up_date && c.follow_up_date <= today && !['sold','lost'].includes(c.status)
+  );
+  document.getElementById('perf-followup-count').textContent = followups.length;
+  const followupHtml = followups.length
+    ? followups.map(c => `
+        <div class="followup-item" onclick="showCustomerDrawer('${c.id}')">
+          <div class="followup-avatar">${c.company_name.substring(0,2).toUpperCase()}</div>
+          <div class="followup-info">
+            <div class="followup-name">${c.company_name}</div>
+            <div class="followup-sub">${c.contact_name||''} ${c.phone ? '· '+c.phone : ''}</div>
+          </div>
+          <div class="followup-date ${new Date(c.follow_up_date) < new Date() ? 'overdue' : ''}">
+            📅 ${formatDate(c.follow_up_date)}
+          </div>
+        </div>`).join('')
+    : '<div style="color:var(--text-tertiary);font-size:13px;padding:12px 0">Bugün takip edilecek müşteri yok 🎉</div>';
+  document.getElementById('perf-followup-list').innerHTML = followupHtml;
+
+  // Yeni müşteri banner
+  if (stats.newCustomers24h > 0) {
+    document.getElementById('ncb-text').textContent =
+      `🆕 Son 24 saatte ${stats.newCustomers24h} yeni müşteri eklendi!`;
+    document.getElementById('new-customers-banner').classList.remove('hidden');
+  }
+}
+
+/* ──────────────────────────────────────────────
+   Quick Add Modal (Feature 7)
+────────────────────────────────────────────── */
+function openQuickAdd() {
+  resetQuickAdd();
+  document.getElementById('quick-add-backdrop').classList.remove('hidden');
+  document.getElementById('quick-add-modal').classList.remove('hidden');
+  document.getElementById('qa-company').focus();
+}
+
+function closeQuickAdd() {
+  document.getElementById('quick-add-backdrop').classList.add('hidden');
+  document.getElementById('quick-add-modal').classList.add('hidden');
+}
+
+function resetQuickAdd() {
+  ['qa-company','qa-sector','qa-contact','qa-phone','qa-email','qa-city']
+    .forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('quick-add-error').classList.add('hidden');
+  document.getElementById('quick-add-success').classList.add('hidden');
+  document.getElementById('quick-add-form-wrap').classList.remove('hidden');
+  document.getElementById('qa-footer').classList.remove('hidden');
+}
+
+async function submitQuickAdd() {
+  const company = document.getElementById('qa-company').value.trim();
+  if (!company) {
+    const errEl = document.getElementById('quick-add-error');
+    errEl.textContent = 'Firma adı zorunludur.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const btn = document.getElementById('quick-add-submit');
+  btn.disabled = true;
+  btn.textContent = 'Kaydediliyor…';
+
+  try {
+    if (!state.isDemoMode) {
+      await apiFetch('/api/customers', {
+        method: 'POST',
+        body: {
+          company_name: company,
+          sector:       document.getElementById('qa-sector').value.trim(),
+          contact_name: document.getElementById('qa-contact').value.trim(),
+          phone:        document.getElementById('qa-phone').value.trim(),
+          email:        document.getElementById('qa-email').value.trim().toLowerCase(),
+          city:         document.getElementById('qa-city').value.trim(),
+          status:       'new',
+        },
+      });
+      // Refresh cache
+      state.customers = await fetchCustomers();
+    } else {
+      // Demo: just show success
+    }
+
+    document.getElementById('qa-success-name').textContent = company + ' başarıyla eklendi.';
+    document.getElementById('quick-add-form-wrap').classList.add('hidden');
+    document.getElementById('qa-footer').classList.add('hidden');
+    document.getElementById('quick-add-success').classList.remove('hidden');
+
+    // Badge güncelle
+    const badge = document.getElementById('sb-badge-customers');
+    if (badge) {
+      const cur = parseInt(badge.textContent || '0') + 1;
+      badge.textContent = cur; badge.style.display = 'flex';
+    }
+  } catch (e) {
+    const errEl = document.getElementById('quick-add-error');
+    errEl.textContent = e.message || 'Kaydetme hatası.';
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Kaydet';
+  }
 }
 
 /* ──────────────────────────────────────────────
@@ -1186,4 +1668,16 @@ async function fetchCampaigns() {
   if (state.isDemoMode) return DEMO_CAMPAIGNS;
   try { return await apiFetch('/api/campaigns'); }
   catch { return []; }
+}
+
+async function fetchUsers() {
+  if (state.isDemoMode) return [DEMO_USER];
+  try { return await apiFetch('/api/users'); }
+  catch { return []; }
+}
+
+async function fetchStats() {
+  if (state.isDemoMode) return null;
+  try { return await apiFetch('/api/stats'); }
+  catch { return null; }
 }

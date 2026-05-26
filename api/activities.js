@@ -36,7 +36,7 @@ module.exports = async (req, res) => {
 
   // ── POST: yeni aktivite kaydet ────────────────────────────────
   if (req.method === 'POST') {
-    const { customer_id, result, note } = req.body || {};
+    const { customer_id, result, note, follow_up_date } = req.body || {};
     if (!customer_id) return res.status(400).json({ error: 'customer_id gerekli' });
     if (!result)      return res.status(400).json({ error: 'result gerekli' });
 
@@ -55,9 +55,18 @@ module.exports = async (req, res) => {
           UPDATE customers SET
             status         = ${newStatus},
             last_contacted = NOW(),
+            follow_up_date = ${follow_up_date || null},
             updated_at     = NOW()
           WHERE id = ${customer_id}
         `;
+      } else {
+        // Status değişmese bile follow_up_date'i güncelle
+        if (follow_up_date) {
+          await sql`
+            UPDATE customers SET follow_up_date = ${follow_up_date}, updated_at = NOW()
+            WHERE id = ${customer_id}
+          `;
+        }
       }
 
       return res.status(201).json(rows[0]);

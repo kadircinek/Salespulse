@@ -374,6 +374,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // ── Müşteri ekle / düzenle modal ──
+  document.getElementById('add-customer-btn').addEventListener('click', () => openCustomerModal('add'));
+  document.getElementById('customer-modal-close').addEventListener('click', closeCustomerModal);
+  document.getElementById('customer-modal-cancel').addEventListener('click', closeCustomerModal);
+  document.getElementById('customer-modal-backdrop').addEventListener('click', closeCustomerModal);
+  document.getElementById('customer-modal-submit').addEventListener('click', submitCustomerModal);
+  document.getElementById('drawer-edit-btn').addEventListener('click', () => {
+    const id = document.getElementById('drawer-edit-btn').dataset.customerId;
+    if (id) { closeDrawer(); openCustomerModal('edit', id); }
+  });
+
   // ── Quick add modal (Feature 7) ──
   document.getElementById('quick-add-btn').addEventListener('click', openQuickAdd);
   document.getElementById('quick-add-close').addEventListener('click', closeQuickAdd);
@@ -711,10 +722,14 @@ async function renderCustomers(search = document.getElementById('customer-search
         <td>${c.city || '-'}</td>
         <td>${statusPill(c.status, STATUS_CONFIG)}</td>
         <td style="color:var(--text-secondary);font-size:12px">${timeAgo(c.last_contacted)}</td>
-        <td>
+        <td class="table-actions-cell">
           <button class="table-action-btn" onclick="event.stopPropagation();showCustomerDrawer('${c.id}')">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             Detay
+          </button>
+          <button class="table-action-btn table-edit-btn" onclick="event.stopPropagation();openCustomerModal('edit','${c.id}')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Düzenle
           </button>
         </td>
       </tr>`;
@@ -881,6 +896,8 @@ async function showCustomerDrawer(id) {
   document.getElementById('drawer-avatar').style.color       = cfg.color;
   document.getElementById('drawer-company').textContent      = c.company_name;
   document.getElementById('drawer-contact').textContent      = c.contact_name || '-';
+  // Düzenle butonuna customer ID bağla
+  document.getElementById('drawer-edit-btn').dataset.customerId = id;
 
   // Show drawer immediately with loading state
   document.getElementById('drawer-body').innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-tertiary)">Yükleniyor…</div>';
@@ -1563,6 +1580,153 @@ async function renderPerformance() {
       `🆕 Son 24 saatte ${stats.newCustomers24h} yeni müşteri eklendi!`;
     document.getElementById('new-customers-banner').classList.remove('hidden');
   }
+}
+
+/* ──────────────────────────────────────────────
+   Müşteri Ekle / Düzenle Modal
+────────────────────────────────────────────── */
+let _customerModalMode = 'add';   // 'add' | 'edit'
+let _customerModalId   = null;
+
+function openCustomerModal(mode, customerId) {
+  _customerModalMode = mode;
+  _customerModalId   = customerId || null;
+
+  // Başlık ve buton metni
+  document.getElementById('customer-modal-title').textContent =
+    mode === 'edit' ? '✏️ Müşteriyi Düzenle' : '➕ Yeni Müşteri';
+  document.getElementById('customer-modal-submit-text').textContent =
+    mode === 'edit' ? 'Güncelle' : 'Kaydet';
+
+  // Formu sıfırla
+  const fields = ['cm-company','cm-sector','cm-city','cm-website','cm-fitscore',
+                   'cm-contact','cm-title','cm-phone','cm-email','cm-notes'];
+  fields.forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('cm-status').value   = 'new';
+  document.getElementById('cm-assigned').value = '';
+  document.getElementById('customer-modal-error').classList.add('hidden');
+
+  // Temsilci dropdown'ını doldur
+  const assignSel = document.getElementById('cm-assigned');
+  assignSel.innerHTML = '<option value="">— Atanmamış —</option>' +
+    state.users.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+
+  // Edit modunda mevcut değerleri doldur
+  if (mode === 'edit' && customerId) {
+    const all = state.isDemoMode ? DEMO_CUSTOMERS : state.customers;
+    const c   = all.find(x => x.id === customerId);
+    if (c) {
+      document.getElementById('cm-company').value  = c.company_name  || '';
+      document.getElementById('cm-sector').value   = c.sector        || '';
+      document.getElementById('cm-city').value     = c.city          || '';
+      document.getElementById('cm-website').value  = c.website       || '';
+      document.getElementById('cm-fitscore').value = c.fit_score     || '';
+      document.getElementById('cm-contact').value  = c.contact_name  || '';
+      document.getElementById('cm-title').value    = c.title         || '';
+      document.getElementById('cm-phone').value    = c.phone         || '';
+      document.getElementById('cm-email').value    = c.email         || '';
+      document.getElementById('cm-notes').value    = c.notes         || '';
+      document.getElementById('cm-status').value   = c.status        || 'new';
+      if (c.assigned_user_id) document.getElementById('cm-assigned').value = c.assigned_user_id;
+    }
+  }
+
+  document.getElementById('customer-modal-backdrop').classList.remove('hidden');
+  document.getElementById('customer-modal').classList.remove('hidden');
+  document.getElementById('cm-company').focus();
+}
+
+function closeCustomerModal() {
+  document.getElementById('customer-modal-backdrop').classList.add('hidden');
+  document.getElementById('customer-modal').classList.add('hidden');
+}
+
+async function submitCustomerModal() {
+  const company = document.getElementById('cm-company').value.trim();
+  const errEl   = document.getElementById('customer-modal-error');
+  errEl.classList.add('hidden');
+
+  if (!company) {
+    errEl.textContent = 'Firma adı zorunludur.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const submitBtn  = document.getElementById('customer-modal-submit');
+  const submitText = document.getElementById('customer-modal-submit-text');
+  submitBtn.disabled = true;
+  submitText.textContent = 'Kaydediliyor…';
+
+  const body = {
+    company_name:     company,
+    sector:           document.getElementById('cm-sector').value.trim(),
+    city:             document.getElementById('cm-city').value.trim(),
+    website:          document.getElementById('cm-website').value.trim(),
+    fit_score:        parseInt(document.getElementById('cm-fitscore').value) || null,
+    contact_name:     document.getElementById('cm-contact').value.trim(),
+    title:            document.getElementById('cm-title').value.trim(),
+    phone:            document.getElementById('cm-phone').value.trim(),
+    email:            document.getElementById('cm-email').value.trim().toLowerCase(),
+    notes:            document.getElementById('cm-notes').value.trim(),
+    status:           document.getElementById('cm-status').value,
+    assigned_user_id: document.getElementById('cm-assigned').value || null,
+  };
+
+  try {
+    if (state.isDemoMode) {
+      // Demo modda cache'i güncelle
+      if (_customerModalMode === 'add') {
+        const newC = { ...body, id: 'demo-' + Date.now(), last_contacted: null, created_at: new Date().toISOString() };
+        DEMO_CUSTOMERS.unshift(newC);
+        state.customers = [...DEMO_CUSTOMERS];
+      } else {
+        const idx = DEMO_CUSTOMERS.findIndex(c => c.id === _customerModalId);
+        if (idx !== -1) Object.assign(DEMO_CUSTOMERS[idx], body);
+        state.customers = [...DEMO_CUSTOMERS];
+      }
+    } else {
+      if (_customerModalMode === 'add') {
+        const newC = await apiFetch('/api/customers', { method: 'POST', body });
+        state.customers.unshift(newC);
+      } else {
+        const updated = await apiFetch(`/api/customers?id=${_customerModalId}`, { method: 'PUT', body });
+        const idx = state.customers.findIndex(c => c.id === _customerModalId);
+        if (idx !== -1) state.customers[idx] = { ...state.customers[idx], ...updated };
+      }
+    }
+
+    closeCustomerModal();
+    // Sayfayı yenile
+    if (state.currentPage === 'customers') renderCustomers();
+    else if (state.currentPage === 'dashboard') renderDashboard();
+
+    showToast(
+      _customerModalMode === 'add'
+        ? `✅ ${company} müşteri listesine eklendi`
+        : `✅ ${company} güncellendi`,
+      2500
+    );
+  } catch (e) {
+    errEl.textContent = e.message || 'Bir hata oluştu.';
+    errEl.classList.remove('hidden');
+  } finally {
+    submitBtn.disabled = false;
+    submitText.textContent = _customerModalMode === 'edit' ? 'Güncelle' : 'Kaydet';
+  }
+}
+
+// Basit toast bildirimi
+function showToast(msg, duration = 2000) {
+  let toast = document.getElementById('sp-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'sp-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.className = 'sp-toast visible';
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.className = 'sp-toast'; }, duration);
 }
 
 /* ──────────────────────────────────────────────

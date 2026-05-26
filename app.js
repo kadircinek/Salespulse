@@ -1262,8 +1262,9 @@ function startSession() {
 
   callable.sort((a, b) => {
     // ── KURAL 1: Bugün zaten aranmışsa en sona at ──────────────────────────
-    const aToday = a.last_contacted && a.last_contacted.slice(0, 10) === today;
-    const bToday = b.last_contacted && b.last_contacted.slice(0, 10) === today;
+    // Not: null && expr → null (not false), so use ternary for strict boolean
+    const aToday = a.last_contacted ? a.last_contacted.slice(0, 10) === today : false;
+    const bToday = b.last_contacted ? b.last_contacted.slice(0, 10) === today : false;
     if (aToday !== bToday) return aToday ? 1 : -1;
 
     // ── KURAL 2: Öncelik tieri ─────────────────────────────────────────────
@@ -2065,9 +2066,10 @@ function xiShowSheetSelector(sheetNames) {
   document.getElementById('xi-parse-error').classList.add('hidden');
 
   // Otomatik en iyi sayfayı seç: "firma" veya "arama" içeren sayfa adını
-  const bestIdx = sheetNames.findIndex(s =>
-    /firma|customer|musteri|list|liste|arama/i.test(s)
-  );
+  // Önce "firma bilgi" veya "customer" içereni seç; yoksa "arama listesi"; yoksa ilk sayfayı al
+  let bestIdx = sheetNames.findIndex(s => /firma.*(bilgi|kart)|customer.*list/i.test(s));
+  if (bestIdx < 0) bestIdx = sheetNames.findIndex(s => /firma|musteri|customer/i.test(s));
+  if (bestIdx < 0) bestIdx = sheetNames.findIndex(s => /arama|list|liste/i.test(s));
   if (bestIdx >= 0) sel.value = bestIdx;
 }
 

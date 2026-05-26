@@ -2005,3 +2005,15 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
   transform: translateX(-50%) translateY(0);
   opacity: 1;
 }
+
+/* Eklenme tarihi sütunu */
+.added-date {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.added-ago {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+}

@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="styles.css"/>
+  <!-- SheetJS: Excel/CSV parse (client-side, no server upload) -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -402,10 +404,16 @@
             <h1 class="page-title">Müşteriler</h1>
             <p class="page-desc" id="customers-count-text">0 müşteri</p>
           </div>
-          <button class="btn-primary" id="add-customer-btn">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Müşteri Ekle
-          </button>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn-ghost" id="excel-import-btn" title="Excel/CSV ile toplu müşteri ekle">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              Excel'den Aktar
+            </button>
+            <button class="btn-primary" id="add-customer-btn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Müşteri Ekle
+            </button>
+          </div>
         </div>
 
         <div class="toolbar">
@@ -791,6 +799,95 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Kaydet
     </button>
+  </div>
+</div>
+
+<!-- ═══ EXCEL IMPORT MODAL ═══ -->
+<div id="excel-import-backdrop" class="modal-backdrop hidden"></div>
+<div id="excel-import-modal" class="modal modal-xl hidden">
+  <div class="modal-header">
+    <h2>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:#16a34a;vertical-align:-3px;margin-right:6px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      Excel'den Toplu Müşteri Aktar
+    </h2>
+    <button class="modal-close" id="excel-import-close">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="modal-body" style="padding:24px">
+
+    <!-- STEP 1: Upload -->
+    <div id="xi-step-upload">
+      <!-- Sütun rehberi -->
+      <div class="xi-guide">
+        <div class="xi-guide-title">📋 Excel sütun başlıkları (ilk satır)</div>
+        <div class="xi-guide-cols">
+          <span class="xi-col req">Firma Adı *</span>
+          <span class="xi-col">Yetkili</span>
+          <span class="xi-col">Telefon</span>
+          <span class="xi-col">E-posta</span>
+          <span class="xi-col">Sektör</span>
+          <span class="xi-col">Şehir</span>
+          <span class="xi-col">Unvan</span>
+          <span class="xi-col">Durum</span>
+          <span class="xi-col">Notlar</span>
+          <span class="xi-col">Uyum Skoru</span>
+          <span class="xi-col">LinkedIn</span>
+        </div>
+        <div class="xi-guide-note">* zorunlu alan &nbsp;·&nbsp; Türkçe veya İngilizce başlıklar otomatik tanınır &nbsp;·&nbsp; .xlsx, .xls, .csv desteklenir</div>
+        <button class="xi-template-btn" id="xi-download-template">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Örnek Şablonu İndir (.xlsx)
+        </button>
+      </div>
+
+      <!-- Drag-drop zone -->
+      <div class="xi-dropzone" id="xi-dropzone">
+        <input type="file" id="xi-file-input" accept=".xlsx,.xls,.csv" style="display:none"/>
+        <div class="xi-drop-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </div>
+        <div class="xi-drop-text">Excel veya CSV dosyasını buraya sürükleyin</div>
+        <div class="xi-drop-sub">ya da</div>
+        <button class="btn-primary" id="xi-browse-btn" type="button">Dosya Seç</button>
+      </div>
+      <div id="xi-parse-error" class="alert-error hidden" style="margin-top:12px"></div>
+    </div>
+
+    <!-- STEP 2: Preview -->
+    <div id="xi-step-preview" class="hidden">
+      <div class="xi-preview-bar">
+        <div id="xi-preview-summary"></div>
+        <button class="btn-ghost xi-back-btn" id="xi-back-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          Başka Dosya
+        </button>
+      </div>
+      <div class="xi-preview-wrap">
+        <table class="xi-preview-table" id="xi-preview-table">
+          <thead id="xi-preview-thead"></thead>
+          <tbody id="xi-preview-tbody"></tbody>
+        </table>
+      </div>
+      <div id="xi-import-error" class="alert-error hidden" style="margin-top:12px"></div>
+    </div>
+
+    <!-- STEP 3: Result -->
+    <div id="xi-step-result" class="hidden xi-result-wrap">
+      <div class="xi-result-icon" id="xi-result-icon">✅</div>
+      <div class="xi-result-title" id="xi-result-title">İçe Aktarma Tamamlandı</div>
+      <div class="xi-result-stats" id="xi-result-stats"></div>
+      <div id="xi-result-errors" class="xi-result-error-list hidden"></div>
+    </div>
+
+  </div>
+  <div class="modal-footer">
+    <button class="btn-ghost" id="excel-import-cancel">İptal</button>
+    <button class="btn-primary hidden" id="xi-import-btn" style="background:#16a34a;border-color:#16a34a">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+      <span id="xi-import-btn-text">İçe Aktar</span>
+    </button>
+    <button class="btn-primary hidden" id="xi-done-btn">Tamam</button>
   </div>
 </div>
 

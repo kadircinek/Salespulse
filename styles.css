@@ -2017,3 +2017,101 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
   color: var(--text-tertiary);
   margin-top: 1px;
 }
+
+/* ═══ EXCEL IMPORT MODAL ═══ */
+.modal-xl { max-width: 820px; width: 95vw; }
+
+/* Rehber kutusu */
+.xi-guide {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+.xi-guide-title { font-size: 12px; font-weight: 700; color: #166534; margin-bottom: 8px; }
+.xi-guide-cols { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.xi-col {
+  background: white;
+  border: 1px solid #d1fae5;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #374151;
+}
+.xi-col.req { border-color: #16a34a; color: #16a34a; font-weight: 700; }
+.xi-guide-note { font-size: 11px; color: #6b7280; margin-bottom: 10px; }
+.xi-template-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px;
+  background: white; border: 1px solid #16a34a; border-radius: 6px;
+  font-size: 12px; font-weight: 600; color: #16a34a; cursor: pointer;
+  transition: all .15s;
+}
+.xi-template-btn:hover { background: #16a34a; color: white; }
+
+/* Drag & Drop zone */
+.xi-dropzone {
+  border: 2px dashed #d1d5db;
+  border-radius: var(--radius);
+  padding: 40px 24px;
+  text-align: center;
+  transition: all .2s;
+  cursor: pointer;
+  background: #fafafa;
+}
+.xi-dropzone:hover, .xi-dropzone.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+.xi-drop-icon { color: #9ca3af; margin-bottom: 12px; }
+.xi-dropzone:hover .xi-drop-icon, .xi-dropzone.drag-over .xi-drop-icon { color: var(--accent); }
+.xi-drop-text { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+.xi-drop-sub { font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px; }
+
+/* Preview */
+.xi-preview-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px; flex-wrap: wrap; gap: 8px;
+}
+#xi-preview-summary { font-size: 13px; color: var(--text-secondary); }
+.xi-back-btn { font-size: 12px; }
+.xi-preview-wrap {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.xi-preview-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+.xi-preview-table th {
+  background: var(--surface-2); padding: 8px 10px;
+  text-align: left; font-weight: 600; color: var(--text-secondary);
+  position: sticky; top: 0; white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+.xi-preview-table td {
+  padding: 7px 10px; border-bottom: 1px solid var(--border);
+  color: var(--text-primary); white-space: nowrap;
+}
+.xi-preview-table tr:last-child td { border-bottom: none; }
+.xi-row-error td { background: #fff7ed; color: #c2410c !important; }
+
+/* Result step */
+.xi-result-wrap { text-align: center; padding: 32px 16px; }
+.xi-result-icon { font-size: 48px; margin-bottom: 12px; }
+.xi-result-title { font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; }
+.xi-result-stats { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; }
+.xi-stat {
+  padding: 8px 18px; border-radius: 999px; font-size: 14px; font-weight: 600;
+}
+.xi-stat-ok { background: #dcfce7; color: #166534; }
+.xi-stat-err { background: #fee2e2; color: #991b1b; }
+.xi-result-error-list {
+  background: #fff7ed; border: 1px solid #fed7aa; border-radius: var(--radius);
+  padding: 12px 16px; text-align: left; max-height: 200px; overflow-y: auto;
+}
+.xi-err-title { font-weight: 700; font-size: 12px; color: #9a3412; margin-bottom: 6px; }
+.xi-err-row { font-size: 12px; color: #7c2d12; padding: 2px 0; }

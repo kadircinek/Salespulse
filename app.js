@@ -385,6 +385,29 @@ document.addEventListener('DOMContentLoaded', () => {
     if (id) { closeDrawer(); openCustomerModal('edit', id); }
   });
 
+  // ── Excel import modal ──
+  document.getElementById('excel-import-btn').addEventListener('click', openExcelImport);
+  document.getElementById('excel-import-close').addEventListener('click', closeExcelImport);
+  document.getElementById('excel-import-cancel').addEventListener('click', closeExcelImport);
+  document.getElementById('excel-import-backdrop').addEventListener('click', closeExcelImport);
+  document.getElementById('xi-browse-btn').addEventListener('click', () => document.getElementById('xi-file-input').click());
+  document.getElementById('xi-file-input').addEventListener('change', e => { if (e.target.files[0]) handleExcelFile(e.target.files[0]); });
+  document.getElementById('xi-back-btn').addEventListener('click', xiResetToUpload);
+  document.getElementById('xi-import-btn').addEventListener('click', submitExcelImport);
+  document.getElementById('xi-done-btn').addEventListener('click', closeExcelImport);
+  document.getElementById('xi-download-template').addEventListener('click', downloadExcelTemplate);
+
+  // Drag & Drop
+  const dz = document.getElementById('xi-dropzone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) handleExcelFile(f);
+  });
+
   // ── Quick add modal (Feature 7) ──
   document.getElementById('quick-add-btn').addEventListener('click', openQuickAdd);
   document.getElementById('quick-add-close').addEventListener('click', closeQuickAdd);
@@ -681,7 +704,11 @@ function renderCallFeedItem(c) {
    Customers
 ────────────────────────────────────────────── */
 async function renderCustomers(search = document.getElementById('customer-search').value) {
-  const all = state.isDemoMode ? DEMO_CUSTOMERS : await fetchCustomers();
+  // Demo modda: state.customers zaten set edilmişse (ör. Excel import) onu kullan,
+  // aksi hâlde DEMO_CUSTOMERS'dan al
+  const all = state.isDemoMode
+    ? (state.customers.length ? state.customers : DEMO_CUSTOMERS)
+    : await fetchCustomers();
   state.customers = all; // cache'le
   let items = all;
   if (state.customerFilter) items = items.filter(c => c.status === state.customerFilter);
@@ -1845,4 +1872,287 @@ async function fetchStats() {
   if (state.isDemoMode) return null;
   try { return await apiFetch('/api/stats'); }
   catch { return null; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  EXCEL IMPORT
+// ═══════════════════════════════════════════════════════════════
+
+// Türkçe/İngilizce sütun başlıklarını DB alanlarına eşle
+const XI_COLUMN_MAP = {
+  // company_name
+  'firma adı':      'company_name', 'firma adi':     'company_name',
+  'şirket adı':     'company_name', 'sirket adi':    'company_name',
+  'firma':          'company_name', 'şirket':        'company_name',
+  'company name':   'company_name', 'company':       'company_name',
+  'company_name':   'company_name',
+  // contact_name
+  'yetkili adı':    'contact_name', 'yetkili adi':   'contact_name',
+  'yetkili':        'contact_name', 'iletişim kişisi': 'contact_name',
+  'iletisim kisisi':'contact_name', 'kişi':          'contact_name',
+  'contact name':   'contact_name', 'contact':       'contact_name',
+  'contact_name':   'contact_name',
+  // phone
+  'telefon':        'phone', 'tel':              'phone',
+  'phone':          'phone', 'mobile':           'phone', 'gsm': 'phone',
+  // email
+  'e-posta':        'email', 'eposta':           'email',
+  'email':          'email', 'mail':             'email', 'e mail': 'email',
+  // sector
+  'sektör':         'sector', 'sektor':           'sector',
+  'sector':         'sector', 'industry':         'sector',
+  // city
+  'şehir':          'city', 'sehir':             'city',
+  'il':             'city', 'city':              'city',
+  // title
+  'unvan':          'title', 'pozisyon':          'title',
+  'title':          'title', 'position':          'title', 'jabatan': 'title',
+  // status
+  'durum':          'status', 'status':           'status',
+  // notes
+  'notlar':         'notes', 'not':               'notes',
+  'notes':          'notes', 'note':              'notes', 'açıklama': 'notes',
+  // fit_score
+  'uyum skoru':     'fit_score', 'skor':          'fit_score',
+  'fit score':      'fit_score', 'fit_score':     'fit_score', 'score': 'fit_score',
+  // linkedin_url
+  'linkedin':       'linkedin_url', 'linkedin url': 'linkedin_url',
+  'linkedin_url':   'linkedin_url',
+};
+
+// Durum eşlemesi (Türkçe metin → DB değeri)
+const XI_STATUS_MAP = {
+  'yeni': 'new', 'new': 'new',
+  'aranacak': 'to_call', 'to_call': 'to_call', 'to call': 'to_call',
+  'sonra ara': 'call_later', 'call_later': 'call_later',
+  'görüşüldü': 'contacted', 'gorusuldu': 'contacted', 'contacted': 'contacted',
+  'ilgili': 'interested', 'interested': 'interested',
+  'teklif gönderildi': 'offer_sent', 'teklif gonderildi': 'offer_sent', 'offer_sent': 'offer_sent', 'offer sent': 'offer_sent',
+  'pazarlıkta': 'negotiating', 'pazarlikta': 'negotiating', 'negotiating': 'negotiating',
+  'satış yapıldı': 'sold', 'satis yapildi': 'sold', 'satıldı': 'sold', 'sold': 'sold',
+  'kaybedildi': 'lost', 'lost': 'lost',
+  'ulaşılamadı': 'unreachable', 'ulasilamadi': 'unreachable', 'unreachable': 'unreachable',
+};
+
+let _xiParsedRows = []; // parse edilmiş satırlar
+let _xiMappedHeaders = []; // {label, field} dizisi
+
+function openExcelImport() {
+  _xiParsedRows = [];
+  _xiMappedHeaders = [];
+  xiResetToUpload();
+  document.getElementById('excel-import-modal').classList.remove('hidden');
+  document.getElementById('excel-import-backdrop').classList.remove('hidden');
+}
+
+function closeExcelImport() {
+  document.getElementById('excel-import-modal').classList.add('hidden');
+  document.getElementById('excel-import-backdrop').classList.add('hidden');
+  // Müşteri listesini yenile (import sonrası)
+  if (!state.isDemoMode) loadCustomers();
+}
+
+function xiResetToUpload() {
+  document.getElementById('xi-step-upload').classList.remove('hidden');
+  document.getElementById('xi-step-preview').classList.add('hidden');
+  document.getElementById('xi-step-result').classList.add('hidden');
+  document.getElementById('xi-import-btn').classList.add('hidden');
+  document.getElementById('xi-done-btn').classList.add('hidden');
+  document.getElementById('excel-import-cancel').classList.remove('hidden');
+  document.getElementById('xi-parse-error').classList.add('hidden');
+  document.getElementById('xi-file-input').value = '';
+  _xiParsedRows = [];
+}
+
+function handleExcelFile(file) {
+  const allowed = ['.xlsx', '.xls', '.csv'];
+  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  if (!allowed.includes(ext)) {
+    xiShowParseError('Desteklenmeyen dosya türü. Lütfen .xlsx, .xls veya .csv yükleyin.');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+      if (raw.length < 2) {
+        xiShowParseError('Dosya boş veya sadece başlık satırı içeriyor.');
+        return;
+      }
+
+      // Başlık satırını normalize et
+      const headers = raw[0].map(h => (h||'').toString().trim());
+      _xiMappedHeaders = headers.map(h => ({
+        label: h,
+        field: XI_COLUMN_MAP[h.toLowerCase()] || null,
+      }));
+
+      const companyCol = _xiMappedHeaders.findIndex(h => h.field === 'company_name');
+      if (companyCol === -1) {
+        xiShowParseError('Firma Adı sütunu bulunamadı. Lütfen başlıklarını kontrol edin.');
+        return;
+      }
+
+      // Veri satırlarını parse et (max 500)
+      _xiParsedRows = [];
+      for (let i = 1; i < Math.min(raw.length, 501); i++) {
+        const row = raw[i];
+        // Tamamen boş satırları atla
+        if (row.every(cell => !cell && cell !== 0)) continue;
+        const obj = {};
+        _xiMappedHeaders.forEach((h, idx) => {
+          if (h.field) {
+            let val = (row[idx] || '').toString().trim();
+            if (h.field === 'status') val = XI_STATUS_MAP[val.toLowerCase()] || 'new';
+            obj[h.field] = val;
+          }
+        });
+        _xiParsedRows.push({ _rowNum: i + 1, ...obj });
+      }
+
+      if (_xiParsedRows.length === 0) {
+        xiShowParseError('Dosyada veri satırı bulunamadı.');
+        return;
+      }
+
+      xiShowPreview();
+    } catch (err) {
+      xiShowParseError('Dosya okunamadı: ' + err.message);
+    }
+  };
+  reader.onerror = () => xiShowParseError('Dosya okunurken hata oluştu.');
+  reader.readAsArrayBuffer(file);
+}
+
+function xiShowParseError(msg) {
+  const el = document.getElementById('xi-parse-error');
+  el.textContent = '⚠ ' + msg;
+  el.classList.remove('hidden');
+}
+
+function xiShowPreview() {
+  document.getElementById('xi-step-upload').classList.add('hidden');
+  document.getElementById('xi-step-preview').classList.remove('hidden');
+  document.getElementById('xi-import-btn').classList.remove('hidden');
+  document.getElementById('xi-import-btn-text').textContent = `İçe Aktar (${_xiParsedRows.length} müşteri)`;
+
+  // Özet
+  const mappedCount = _xiMappedHeaders.filter(h => h.field).length;
+  const skippedCols = _xiMappedHeaders.filter(h => !h.field && h.label).map(h => h.label);
+  let summaryHtml = `<strong>${_xiParsedRows.length}</strong> satır hazır &nbsp;·&nbsp; <strong>${mappedCount}</strong> sütun eşlendi`;
+  if (skippedCols.length) summaryHtml += ` &nbsp;·&nbsp; <span style="color:#ef4444">Tanınmayan: ${skippedCols.join(', ')}</span>`;
+  document.getElementById('xi-preview-summary').innerHTML = summaryHtml;
+
+  // Önizleme tablosu başlıkları
+  const thead = document.getElementById('xi-preview-thead');
+  const SHOW_FIELDS = ['company_name','contact_name','phone','email','sector','city','status'];
+  thead.innerHTML = '<tr>' + SHOW_FIELDS.map(f => `<th>${xiFieldLabel(f)}</th>`).join('') + '<th>Satır</th></tr>';
+
+  // İlk 20 satır önizleme
+  const tbody = document.getElementById('xi-preview-tbody');
+  const preview = _xiParsedRows.slice(0, 20);
+  tbody.innerHTML = preview.map(row => {
+    const missing = !row.company_name;
+    const cls = missing ? ' class="xi-row-error"' : '';
+    const cells = SHOW_FIELDS.map(f => `<td>${row[f] || '<span style="color:#d1d5db">—</span>'}</td>`).join('');
+    return `<tr${cls}>${cells}<td style="color:#9ca3af;font-size:11px">${row._rowNum}</td></tr>`;
+  }).join('');
+  if (_xiParsedRows.length > 20) {
+    tbody.innerHTML += `<tr><td colspan="${SHOW_FIELDS.length+1}" style="text-align:center;color:#9ca3af;padding:12px;font-size:12px">… ve ${_xiParsedRows.length - 20} satır daha</td></tr>`;
+  }
+}
+
+function xiFieldLabel(field) {
+  const m = { company_name:'Firma', contact_name:'Yetkili', phone:'Telefon', email:'E-posta', sector:'Sektör', city:'Şehir', status:'Durum' };
+  return m[field] || field;
+}
+
+async function submitExcelImport() {
+  const btn = document.getElementById('xi-import-btn');
+  const errEl = document.getElementById('xi-import-error');
+  errEl.classList.add('hidden');
+
+  btn.disabled = true;
+  document.getElementById('xi-import-btn-text').textContent = 'Aktarılıyor…';
+
+  // Demo modda simüle et
+  if (state.isDemoMode) {
+    const now = new Date().toISOString();
+    const added = _xiParsedRows.filter(r => r.company_name).map(r => ({
+      ...r, id: 'xi-' + Math.random().toString(36).slice(2),
+      created_at: now, last_contacted: null, status: r.status || 'new',
+    }));
+    state.customers = [...added, ...state.customers];
+    xiShowResult(added.length, 0, []);
+    btn.disabled = false;
+    return;
+  }
+
+  // Real API
+  const payload = _xiParsedRows.map(({ _rowNum, ...rest }) => rest);
+  try {
+    const result = await apiFetch('/api/bulk-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customers: payload }),
+    });
+    xiShowResult(result.inserted, result.skipped || 0, result.errors || []);
+  } catch (err) {
+    errEl.textContent = '⚠ Hata: ' + err.message;
+    errEl.classList.remove('hidden');
+    document.getElementById('xi-import-btn-text').textContent = `İçe Aktar (${_xiParsedRows.length} müşteri)`;
+  }
+  btn.disabled = false;
+}
+
+function xiShowResult(inserted, skipped, errors) {
+  document.getElementById('xi-step-preview').classList.add('hidden');
+  document.getElementById('xi-import-btn').classList.add('hidden');
+  document.getElementById('excel-import-cancel').classList.add('hidden');
+  document.getElementById('xi-step-result').classList.remove('hidden');
+  document.getElementById('xi-done-btn').classList.remove('hidden');
+
+  const allOk = errors.length === 0;
+  document.getElementById('xi-result-icon').textContent = allOk ? '✅' : '⚠️';
+  document.getElementById('xi-result-title').textContent = allOk ? 'İçe Aktarma Tamamlandı' : 'Aktarma Tamamlandı (bazı hatalar)';
+
+  let statsHtml = `<span class="xi-stat xi-stat-ok"><strong>${inserted}</strong> müşteri eklendi</span>`;
+  if (errors.length) statsHtml += ` <span class="xi-stat xi-stat-err"><strong>${errors.length}</strong> satır atlandı</span>`;
+  document.getElementById('xi-result-stats').innerHTML = statsHtml;
+
+  if (errors.length) {
+    const errEl = document.getElementById('xi-result-errors');
+    errEl.innerHTML = '<div class="xi-err-title">Atlanan satırlar:</div>' +
+      errors.slice(0, 10).map(e => `<div class="xi-err-row">Satır ${e.row}: ${e.reason}</div>`).join('') +
+      (errors.length > 10 ? `<div class="xi-err-row">… ve ${errors.length-10} hata daha</div>` : '');
+    errEl.classList.remove('hidden');
+  }
+
+  // Müşteri listesini yenile (renderCustomers search string alır, dizi değil)
+  if (!state.isDemoMode) {
+    loadCustomers().then(() => renderCustomers(''));
+  } else {
+    renderCustomers('');
+  }
+  showToast(`✅ ${inserted} müşteri başarıyla eklendi!`, 3000);
+}
+
+// Örnek şablon indir (SheetJS ile client-side .xlsx oluştur)
+function downloadExcelTemplate() {
+  const headers = ['Firma Adı', 'Yetkili', 'Telefon', 'E-posta', 'Sektör', 'Şehir', 'Unvan', 'Durum', 'Notlar', 'Uyum Skoru', 'LinkedIn'];
+  const example = ['Örnek Şirket A.Ş.', 'Ahmet Yılmaz', '+90 212 555 0001', 'info@ornek.com', 'Teknoloji', 'İstanbul', 'Satış Müdürü', 'new', 'Yüksek potansiyel', '85', 'https://linkedin.com/in/ahmet'];
+  const ws = XLSX.utils.aoa_to_sheet([headers, example]);
+
+  // Sütun genişlikleri
+  ws['!cols'] = [20,16,16,24,14,12,16,12,20,12,30].map(w => ({ wch: w }));
+
+  // Başlık satırı için stil (SheetJS community edition'da sınırlı)
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Müşteriler');
+  XLSX.writeFile(wb, 'salespulse_musteri_sablonu.xlsx');
 }

@@ -72,6 +72,8 @@ let state = {
   supabase: null,
   currentPage: 'dashboard',
   customerFilter: '',
+  customerSectorFilter: '',
+  customerCityFilter: '',
   offerFilter: '',
   bulkStep: 1,
   bulkSelected: new Set(),
@@ -257,6 +259,23 @@ document.addEventListener('DOMContentLoaded', () => {
     renderCustomers(e.target.value);
   });
 
+  // Sektör / Şehir filtre dropdown'ları
+  document.getElementById('customer-sector-filter').addEventListener('change', (e) => {
+    state.customerSectorFilter = e.target.value;
+    renderCustomers();
+  });
+  document.getElementById('customer-city-filter').addEventListener('change', (e) => {
+    state.customerCityFilter = e.target.value;
+    renderCustomers();
+  });
+  document.getElementById('customer-filter-reset').addEventListener('click', () => {
+    state.customerSectorFilter = '';
+    state.customerCityFilter   = '';
+    document.getElementById('customer-sector-filter').value = '';
+    document.getElementById('customer-city-filter').value   = '';
+    renderCustomers();
+  });
+
   // Offer filters
   document.getElementById('offer-filters').addEventListener('click', (e) => {
     const chip = e.target.closest('.chip');
@@ -396,6 +415,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('xi-import-btn').addEventListener('click', submitExcelImport);
   document.getElementById('xi-done-btn').addEventListener('click', closeExcelImport);
   document.getElementById('xi-download-template').addEventListener('click', downloadExcelTemplate);
+  document.getElementById('xi-sheet-parse-btn').addEventListener('click', () => {
+    const sel = document.getElementById('xi-sheet-select');
+    const sheetName = _xiWorkbook?.SheetNames[parseInt(sel.value)];
+    if (sheetName) xiParseSheet(sheetName);
+  });
 
   // Drag & Drop
   const dz = document.getElementById('xi-dropzone');
@@ -711,16 +735,29 @@ async function renderCustomers(search = document.getElementById('customer-search
     : await fetchCustomers();
   state.customers = all; // cache'le
   let items = all;
-  if (state.customerFilter) items = items.filter(c => c.status === state.customerFilter);
+  if (state.customerFilter)       items = items.filter(c => c.status === state.customerFilter);
+  if (state.customerSectorFilter) items = items.filter(c => (c.sector||'') === state.customerSectorFilter);
+  if (state.customerCityFilter)   items = items.filter(c => (c.city||'')   === state.customerCityFilter);
   if (search) {
     const q = search.toLowerCase();
     items = items.filter(c =>
-      c.company_name.toLowerCase().includes(q) ||
-      c.contact_name.toLowerCase().includes(q) ||
+      (c.company_name||'').toLowerCase().includes(q) ||
+      (c.contact_name||'').toLowerCase().includes(q) ||
       (c.email || '').toLowerCase().includes(q) ||
-      (c.phone || '').includes(q)
+      (c.phone || '').includes(q) ||
+      (c.sector||'').toLowerCase().includes(q) ||
+      (c.city||'').toLowerCase().includes(q)
     );
   }
+
+  // Sektör ve Şehir dropdown'larını doldur (tüm müşterilerden benzersiz değerler)
+  xiPopulateFilterDropdown('customer-sector-filter', all, 'sector', state.customerSectorFilter);
+  xiPopulateFilterDropdown('customer-city-filter',   all, 'city',   state.customerCityFilter);
+
+  // Aktif filtre badge'i
+  const activeFilters = [state.customerSectorFilter, state.customerCityFilter].filter(Boolean).length;
+  const resetBtn = document.getElementById('customer-filter-reset');
+  if (resetBtn) resetBtn.style.display = activeFilters ? 'inline-flex' : 'none';
 
   document.getElementById('customers-count-text').textContent = `${items.length} müşteri`;
 
@@ -1224,15 +1261,29 @@ function startSession() {
   );
 
   callable.sort((a, b) => {
+    // ── KURAL 1: Bugün zaten aranmışsa en sona at ──────────────────────────
+    const aToday = a.last_contacted && a.last_contacted.slice(0, 10) === today;
+    const bToday = b.last_contacted && b.last_contacted.slice(0, 10) === today;
+    if (aToday !== bToday) return aToday ? 1 : -1;
+
+    // ── KURAL 2: Öncelik tieri ─────────────────────────────────────────────
     const priorityOf = (c) => {
-      if (c.status === 'new' && !c.last_contacted) return 0; // Hiç aranmamış
-      if (c.follow_up_date && c.follow_up_date <= today)     return 1; // Takip vakti geldi
+      if (c.status === 'new' && !c.last_contacted) return 0; // Hiç aranmamış yeni
+      if (c.follow_up_date && c.follow_up_date <= today)     return 1; // Takip zamanı geldi
       if (c.status === 'to_call')                            return 2;
       if (c.status === 'call_later')                         return 3;
       return 4;
     };
     const pa = priorityOf(a), pb = priorityOf(b);
     if (pa !== pb) return pa - pb;
+
+    // ── KURAL 3: Aynı tier içinde en uzun süre aranmayanı öne al ──────────
+    // last_contacted null → en önce (hiç aranmamış)
+    const aTs = a.last_contacted ? new Date(a.last_contacted).getTime() : 0;
+    const bTs = b.last_contacted ? new Date(b.last_contacted).getTime() : 0;
+    if (aTs !== bTs) return aTs - bTs; // eskiden yeniye → en eski önce
+
+    // ── KURAL 4: Son olarak fit_score ─────────────────────────────────────
     return (b.fit_score || 0) - (a.fit_score || 0);
   });
 
@@ -1907,26 +1958,36 @@ const XI_COLUMN_MAP = {
   // title
   'unvan':          'title', 'pozisyon':          'title',
   'title':          'title', 'position':          'title', 'jabatan': 'title',
-  // status
-  'durum':          'status', 'status':           'status',
+  // status — "Statu" buteo formatı dahil
+  'durum':          'status', 'status':   'status',
+  'statu':          'status', 'statü':    'status', 'statü': 'status',
   // notes
-  'notlar':         'notes', 'not':               'notes',
-  'notes':          'notes', 'note':              'notes', 'açıklama': 'notes',
-  // fit_score
-  'uyum skoru':     'fit_score', 'skor':          'fit_score',
-  'fit score':      'fit_score', 'fit_score':     'fit_score', 'score': 'fit_score',
+  'notlar':         'notes', 'not':       'notes',
+  'notes':          'notes', 'note':      'notes', 'açıklama': 'notes',
+  'son guncelleme': null,   // tarih sütunu — yoksay
+  'web sitesi':     null,   // yoksay
+  '#':              null,   // sıra no — yoksay
+  // fit_score — "Fit" buteo formatı
+  'fit':            'fit_score',
+  'uyum skoru':     'fit_score', 'skor':   'fit_score',
+  'fit score':      'fit_score', 'fit_score':'fit_score', 'score': 'fit_score',
+  // confidence — "Guven" buteo formatı
+  'güven':          'confidence', 'guven': 'confidence',
+  'confidence':     'confidence',
   // linkedin_url
   'linkedin':       'linkedin_url', 'linkedin url': 'linkedin_url',
   'linkedin_url':   'linkedin_url',
 };
 
-// Durum eşlemesi (Türkçe metin → DB değeri)
+// Durum eşlemesi (Türkçe/İngilizce metin + Buteo Sales formatı → DB değeri)
 const XI_STATUS_MAP = {
   'yeni': 'new', 'new': 'new',
   'aranacak': 'to_call', 'to_call': 'to_call', 'to call': 'to_call',
   'sonra ara': 'call_later', 'call_later': 'call_later',
   'görüşüldü': 'contacted', 'gorusuldu': 'contacted', 'contacted': 'contacted',
+  'contact found': 'contacted', 'ulaşıldı': 'contacted',
   'ilgili': 'interested', 'interested': 'interested',
+  'researched': 'to_call',      // Buteo: araştırıldı → aranacak
   'teklif gönderildi': 'offer_sent', 'teklif gonderildi': 'offer_sent', 'offer_sent': 'offer_sent', 'offer sent': 'offer_sent',
   'pazarlıkta': 'negotiating', 'pazarlikta': 'negotiating', 'negotiating': 'negotiating',
   'satış yapıldı': 'sold', 'satis yapildi': 'sold', 'satıldı': 'sold', 'sold': 'sold',
@@ -1936,10 +1997,12 @@ const XI_STATUS_MAP = {
 
 let _xiParsedRows = []; // parse edilmiş satırlar
 let _xiMappedHeaders = []; // {label, field} dizisi
+let _xiWorkbook = null; // yüklenen workbook (sheet seçimi için)
 
 function openExcelImport() {
   _xiParsedRows = [];
   _xiMappedHeaders = [];
+  _xiWorkbook = null;
   xiResetToUpload();
   document.getElementById('excel-import-modal').classList.remove('hidden');
   document.getElementById('excel-import-backdrop').classList.remove('hidden');
@@ -1960,8 +2023,10 @@ function xiResetToUpload() {
   document.getElementById('xi-done-btn').classList.add('hidden');
   document.getElementById('excel-import-cancel').classList.remove('hidden');
   document.getElementById('xi-parse-error').classList.add('hidden');
+  document.getElementById('xi-sheet-selector-wrap').classList.add('hidden');
   document.getElementById('xi-file-input').value = '';
   _xiParsedRows = [];
+  _xiWorkbook = null;
 }
 
 function handleExcelFile(file) {
@@ -1976,57 +2041,95 @@ function handleExcelFile(file) {
   reader.onload = (e) => {
     try {
       const data = new Uint8Array(e.target.result);
-      const wb = XLSX.read(data, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      _xiWorkbook = XLSX.read(data, { type: 'array' });
 
-      if (raw.length < 2) {
-        xiShowParseError('Dosya boş veya sadece başlık satırı içeriyor.');
-        return;
+      if (_xiWorkbook.SheetNames.length > 1) {
+        // Birden fazla sayfa varsa sayfa seçici göster
+        xiShowSheetSelector(_xiWorkbook.SheetNames);
+      } else {
+        xiParseSheet(_xiWorkbook.SheetNames[0]);
       }
-
-      // Başlık satırını normalize et
-      const headers = raw[0].map(h => (h||'').toString().trim());
-      _xiMappedHeaders = headers.map(h => ({
-        label: h,
-        field: XI_COLUMN_MAP[h.toLowerCase()] || null,
-      }));
-
-      const companyCol = _xiMappedHeaders.findIndex(h => h.field === 'company_name');
-      if (companyCol === -1) {
-        xiShowParseError('Firma Adı sütunu bulunamadı. Lütfen başlıklarını kontrol edin.');
-        return;
-      }
-
-      // Veri satırlarını parse et (max 500)
-      _xiParsedRows = [];
-      for (let i = 1; i < Math.min(raw.length, 501); i++) {
-        const row = raw[i];
-        // Tamamen boş satırları atla
-        if (row.every(cell => !cell && cell !== 0)) continue;
-        const obj = {};
-        _xiMappedHeaders.forEach((h, idx) => {
-          if (h.field) {
-            let val = (row[idx] || '').toString().trim();
-            if (h.field === 'status') val = XI_STATUS_MAP[val.toLowerCase()] || 'new';
-            obj[h.field] = val;
-          }
-        });
-        _xiParsedRows.push({ _rowNum: i + 1, ...obj });
-      }
-
-      if (_xiParsedRows.length === 0) {
-        xiShowParseError('Dosyada veri satırı bulunamadı.');
-        return;
-      }
-
-      xiShowPreview();
     } catch (err) {
       xiShowParseError('Dosya okunamadı: ' + err.message);
     }
   };
   reader.onerror = () => xiShowParseError('Dosya okunurken hata oluştu.');
   reader.readAsArrayBuffer(file);
+}
+
+function xiShowSheetSelector(sheetNames) {
+  const wrap = document.getElementById('xi-sheet-selector-wrap');
+  const sel  = document.getElementById('xi-sheet-select');
+  sel.innerHTML = sheetNames.map((s,i) => `<option value="${i}">${s}</option>`).join('');
+  wrap.classList.remove('hidden');
+  document.getElementById('xi-parse-error').classList.add('hidden');
+
+  // Otomatik en iyi sayfayı seç: "firma" veya "arama" içeren sayfa adını
+  const bestIdx = sheetNames.findIndex(s =>
+    /firma|customer|musteri|list|liste|arama/i.test(s)
+  );
+  if (bestIdx >= 0) sel.value = bestIdx;
+}
+
+function xiParseSheet(sheetName) {
+  document.getElementById('xi-sheet-selector-wrap').classList.add('hidden');
+  document.getElementById('xi-parse-error').classList.add('hidden');
+
+  const ws  = _xiWorkbook.Sheets[sheetName];
+  const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+  // Başlık satırını bul (ilk satırda sütun tanımlayıcı varsa 0, yoksa sonraki satır)
+  let headerRowIdx = 0;
+  // Bazı dosyalarda ilk satır bölüm başlığı olabilir
+  for (let i = 0; i < Math.min(raw.length, 3); i++) {
+    const row = raw[i];
+    const mapped = row.filter(h => h && XI_COLUMN_MAP[h.toString().trim().toLowerCase()] === 'company_name');
+    if (mapped.length > 0) { headerRowIdx = i; break; }
+  }
+
+  if (raw.length < headerRowIdx + 2) {
+    xiShowParseError('Seçilen sayfada yeterli veri bulunamadı.');
+    return;
+  }
+
+  // Başlık satırını normalize et
+  const headers = raw[headerRowIdx].map(h => (h||'').toString().trim());
+  _xiMappedHeaders = headers.map(h => ({
+    label: h,
+    field: XI_COLUMN_MAP[h.toLowerCase()] !== undefined ? XI_COLUMN_MAP[h.toLowerCase()] : null,
+  }));
+
+  const companyCol = _xiMappedHeaders.findIndex(h => h.field === 'company_name');
+  if (companyCol === -1) {
+    xiShowParseError(`"${sheetName}" sayfasında Firma Adı sütunu bulunamadı. Lütfen başka bir sayfa seçin.`);
+    document.getElementById('xi-sheet-selector-wrap').classList.remove('hidden');
+    return;
+  }
+
+  // Veri satırlarını parse et (max 500)
+  _xiParsedRows = [];
+  for (let i = headerRowIdx + 1; i < Math.min(raw.length, headerRowIdx + 501); i++) {
+    const row = raw[i];
+    if (row.every(cell => !cell && cell !== 0)) continue;
+    const obj = {};
+    _xiMappedHeaders.forEach((h, idx) => {
+      if (h.field) {
+        let val = (row[idx] || '').toString().trim();
+        if (h.field === 'status') val = XI_STATUS_MAP[val.toLowerCase()] || 'new';
+        obj[h.field] = val;
+      }
+    });
+    // Sektör içindeki alt çizgileri boşluğa çevir (savunma_sanayii → savunma sanayii)
+    if (obj.sector) obj.sector = obj.sector.replace(/_/g, ' ');
+    _xiParsedRows.push({ _rowNum: i + 1, ...obj });
+  }
+
+  if (_xiParsedRows.length === 0) {
+    xiShowParseError('Seçilen sayfada veri satırı bulunamadı.');
+    return;
+  }
+
+  xiShowPreview();
 }
 
 function xiShowParseError(msg) {
@@ -2155,4 +2258,14 @@ function downloadExcelTemplate() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Müşteriler');
   XLSX.writeFile(wb, 'salespulse_musteri_sablonu.xlsx');
+}
+
+// ─── Filtre dropdown yardımcısı ───────────────────────────────────────────────
+function xiPopulateFilterDropdown(elId, items, field, currentVal) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const vals = [...new Set(items.map(c => (c[field]||'').trim()).filter(Boolean))].sort();
+  const prev = el.value || currentVal;
+  el.innerHTML = `<option value="">Tümü</option>` +
+    vals.map(v => `<option value="${v}"${v===prev?' selected':''}>${v}</option>`).join('');
 }

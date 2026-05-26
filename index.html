@@ -432,6 +432,25 @@
             <button class="chip" data-status="sold">Satış Yapıldı</button>
             <button class="chip" data-status="lost">Kaybedildi</button>
           </div>
+          <!-- Gelişmiş filtreler: Sektör + Şehir -->
+          <div class="adv-filter-row">
+            <div class="adv-filter-item">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M7 12h10M11 18h2"/></svg>
+              <select id="customer-sector-filter" class="adv-filter-select">
+                <option value="">Tüm Sektörler</option>
+              </select>
+            </div>
+            <div class="adv-filter-item">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <select id="customer-city-filter" class="adv-filter-select">
+                <option value="">Tüm Şehirler</option>
+              </select>
+            </div>
+            <button id="customer-filter-reset" class="adv-filter-reset" style="display:none">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              Filtreyi Sıfırla
+            </button>
+          </div>
         </div>
 
         <div class="table-wrap">
@@ -839,6 +858,15 @@
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Örnek Şablonu İndir (.xlsx)
         </button>
+      </div>
+
+      <!-- Sayfa seçici (çok sayfalı Excel için) -->
+      <div id="xi-sheet-selector-wrap" class="xi-sheet-selector hidden">
+        <div class="xi-sheet-label">📑 Dosyada birden fazla sayfa bulundu. Hangisini aktarmak istersiniz?</div>
+        <div class="xi-sheet-row">
+          <select id="xi-sheet-select" class="xi-sheet-select"></select>
+          <button class="btn-primary" id="xi-sheet-parse-btn" type="button">Bu Sayfayı Kullan</button>
+        </div>
       </div>
 
       <!-- Drag-drop zone -->

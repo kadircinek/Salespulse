@@ -2115,3 +2115,81 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 }
 .xi-err-title { font-weight: 700; font-size: 12px; color: #9a3412; margin-bottom: 6px; }
 .xi-err-row { font-size: 12px; color: #7c2d12; padding: 2px 0; }
+
+/* ═══ GELİŞMİŞ MÜŞTERİ FİLTRELERİ ═══ */
+.adv-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.adv-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+}
+.adv-filter-select {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 140px;
+  max-width: 220px;
+  transition: border-color .15s;
+}
+.adv-filter-select:focus { outline: none; border-color: var(--accent); }
+.adv-filter-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  color: #dc2626;
+  cursor: pointer;
+  transition: all .15s;
+}
+.adv-filter-reset:hover { background: #dc2626; color: white; border-color: #dc2626; }
+
+/* ═══ EXCEL SHEET SEÇICI ═══ */
+.xi-sheet-selector {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.xi-sheet-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #92400e;
+  margin-bottom: 10px;
+}
+.xi-sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.xi-sheet-select {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid #fcd34d;
+  border-radius: var(--radius-sm);
+  background: white;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  min-width: 200px;
+  cursor: pointer;
+}
+.xi-sheet-select:focus { outline: none; border-color: var(--accent); }

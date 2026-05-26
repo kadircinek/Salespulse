@@ -1,7 +1,7 @@
 // POST /api/bulk-import
 // Body: { customers: [ { company_name, contact_name, phone, email, sector, city, status, notes, fit_score, linkedin_url, title } ] }
 // Returns: { inserted: N, skipped: N, errors: [...] }
-// Duplicate detection: company_name + contact_name çifti zaten varsa satırı atlar (case-insensitive)
+// Duplicate detection: company_name zaten varsa satırı atlar (case-insensitive) — DB has UNIQUE(company_name)
 
 const { getDb, cors, verifyToken } = require('./_db');
 
@@ -43,12 +43,12 @@ module.exports = async (req, res) => {
 
   const sql = getDb();
 
-  // Mevcut (firma_adı + yetkili_adı) çiftlerini çek → duplicate tespiti için
+  // Mevcut firma adlarını çek → duplicate tespiti için (DB UNIQUE constraint: company_name)
   const existing = await sql`
-    SELECT LOWER(TRIM(company_name)) as cn, LOWER(TRIM(COALESCE(contact_name,''))) as ct
+    SELECT LOWER(TRIM(company_name)) as cn
     FROM customers
   `;
-  const existingSet = new Set(existing.map(r => `${r.cn}|||${r.ct}`));
+  const existingSet = new Set(existing.map(r => r.cn));
 
   let inserted = 0;
   let skipped  = 0;
@@ -65,9 +65,9 @@ module.exports = async (req, res) => {
 
     const companyName  = c.company_name.toString().trim();
     const contactName  = (c.contact_name||'').toString().trim();
-    const dupeKey      = `${companyName.toLowerCase()}|||${contactName.toLowerCase()}`;
+    const dupeKey      = companyName.toLowerCase();
 
-    // Duplicate kontrolü
+    // Duplicate kontrolü (company_name unique constraint)
     if (existingSet.has(dupeKey)) {
       skipped++;
       continue;

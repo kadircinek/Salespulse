@@ -782,6 +782,7 @@ async function renderCustomers(search = document.getElementById('customer-search
         </td>
         <td>${c.contact_name}</td>
         <td>${c.phone || '-'}</td>
+        <td>${c.email ? `<a href="mailto:${c.email}" onclick="event.stopPropagation()" class="email-link" title="${c.email}">${c.email}</a>` : '<span style="color:var(--text-tertiary)">–</span>'}</td>
         <td>${c.sector || '-'}</td>
         <td>${c.city || '-'}</td>
         <td>${statusPill(c.status, STATUS_CONFIG)}</td>

@@ -1,0 +1,130 @@
+// Sequence görevleri
+// GET /api/sequence-tasks                    → bekleyen görevler (varsayılan: vadesi bugün/geçmiş)
+// GET /api/sequence-tasks?scope=all          → tüm bekleyen görevler (gelecek dahil)
+// GET /api/sequence-tasks?customer_id=uuid   → bir müşterinin görevleri
+// PUT /api/sequence-tasks?id=uuid            → { status:'done'|'skipped', note } işaretle
+const { getDb, cors, verifyToken } = require('./_db');
+
+module.exports = async (req, res) => {
+  cors(res);
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const user = verifyToken(req);
+  if (!user) return res.status(401).json({ error: 'Yetkisiz' });
+
+  const sql = getDb();
+
+  try {
+    // ── GET ───────────────────────────────────────────────
+    if (req.method === 'GET') {
+      const { customer_id, scope } = req.query || {};
+
+      if (customer_id) {
+        const rows = await sql`
+          SELECT t.*, c.company_name, c.contact_name, c.email, c.phone,
+                 s.name AS sequence_name
+          FROM sequence_tasks t
+          JOIN customers c ON c.id = t.customer_id
+          JOIN sequence_enrollments e ON e.id = t.enrollment_id
+          JOIN sequences s ON s.id = e.sequence_id
+          WHERE t.customer_id = ${customer_id}
+          ORDER BY t.due_date ASC, t.created_at ASC
+        `;
+        return res.json(rows);
+      }
+
+      // Bekleyen görevler — varsayılan: vadesi bugün ve öncesi (yapılacaklar)
+      if (scope === 'all') {
+        const rows = await sql`
+          SELECT t.*, c.company_name, c.contact_name, c.email, c.phone,
+                 s.name AS sequence_name
+          FROM sequence_tasks t
+          JOIN customers c ON c.id = t.customer_id
+          JOIN sequence_enrollments e ON e.id = t.enrollment_id
+          JOIN sequences s ON s.id = e.sequence_id
+          WHERE t.status = 'pending'
+          ORDER BY t.due_date ASC, t.created_at ASC
+        `;
+        return res.json(rows);
+      }
+
+      const rows = await sql`
+        SELECT t.*, c.company_name, c.contact_name, c.email, c.phone,
+               s.name AS sequence_name
+        FROM sequence_tasks t
+        JOIN customers c ON c.id = t.customer_id
+        JOIN sequence_enrollments e ON e.id = t.enrollment_id
+        JOIN sequences s ON s.id = e.sequence_id
+        WHERE t.status = 'pending' AND t.due_date <= CURRENT_DATE
+        ORDER BY t.due_date ASC, t.created_at ASC
+      `;
+      return res.json(rows);
+    }
+
+    // ── PUT (görev tamamla / atla) ────────────────────────
+    if (req.method === 'PUT') {
+      const id = req.query?.id;
+      if (!id) return res.status(400).json({ error: 'id gerekli' });
+      const { status, note } = req.body || {};
+      if (!['done', 'skipped'].includes(status))
+        return res.status(400).json({ error: "status 'done' veya 'skipped' olmalı" });
+
+      const taskRows = await sql`SELECT * FROM sequence_tasks WHERE id = ${id} LIMIT 1`;
+      const task = taskRows[0];
+      if (!task) return res.status(404).json({ error: 'Görev bulunamadı' });
+
+      // Görevi işaretle
+      await sql`
+        UPDATE sequence_tasks SET status = ${status}, completed_at = NOW()
+        WHERE id = ${id}
+      `;
+
+      if (status === 'done') {
+        // Aktivite kaydı düş (zaman çizelgesinde görünsün)
+        const resultMap = {
+          call: 'görüşüldü', email: 'mail_atıldı', whatsapp: 'mail_atıldı',
+          linkedin_connect: 'görüşüldü', linkedin_message: 'görüşüldü',
+        };
+        const result = resultMap[task.step_type] || 'görüşüldü';
+        const noteText = note || `Sequence görevi: ${stepLabel(task.step_type)}`;
+        try {
+          await sql`
+            INSERT INTO activities (customer_id, result, note, created_by)
+            VALUES (${task.customer_id}, ${result}, ${noteText}, ${user.id})
+          `;
+          await sql`
+            UPDATE customers SET last_contacted = NOW(), updated_at = NOW()
+            WHERE id = ${task.customer_id}
+          `;
+        } catch (e) { /* activities tablosu yoksa sessiz geç */ }
+      }
+
+      // Kayıtta başka bekleyen görev kaldı mı? Kalmadıysa tamamlandı işaretle
+      const remaining = await sql`
+        SELECT COUNT(*)::int AS n FROM sequence_tasks
+        WHERE enrollment_id = ${task.enrollment_id} AND status = 'pending'
+      `;
+      if (remaining[0].n === 0) {
+        await sql`
+          UPDATE sequence_enrollments
+          SET status = 'completed', completed_at = NOW()
+          WHERE id = ${task.enrollment_id} AND status = 'active'
+        `;
+      }
+
+      return res.json({ ok: true, enrollment_completed: remaining[0].n === 0 });
+    }
+
+    return res.status(405).json({ error: 'Method not allowed' });
+  } catch (err) {
+    console.error('sequence-tasks error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+function stepLabel(type) {
+  return ({
+    call: 'Telefon araması', email: 'E-posta', whatsapp: 'WhatsApp mesajı',
+    linkedin_connect: 'LinkedIn bağlantı isteği', linkedin_message: 'LinkedIn mesajı',
+  })[type] || type;
+}

@@ -112,9 +112,10 @@
         <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         <span>Performans</span>
       </a>
-      <a class="sb-item" data-page="campaigns" href="#">
-        <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2L15 22 11 13 2 9l20-7z"/></svg>
-        <span>Kampanyalar</span>
+      <a class="sb-item" data-page="sequences" href="#">
+        <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16M4 12h16M4 19h10"/><circle cx="18" cy="19" r="2"/></svg>
+        <span>Sequence'ler</span>
+        <div class="sb-badge" id="sb-badge-sequences"></div>
       </a>
     </nav>
 
@@ -272,6 +273,9 @@
             </div>
           </div>
         </div>
+
+        <!-- Sequence görev widget'ı -->
+        <div id="seq-dash-widget"></div>
 
         <div class="kpi-row">
           <div class="kpi-card kpi-blue">
@@ -552,18 +556,37 @@
       </div>
 
       <!-- ─── CAMPAIGNS ─── -->
-      <div id="page-campaigns" class="page hidden">
+      <div id="page-sequences" class="page hidden">
         <div class="page-header">
           <div>
-            <h1 class="page-title">Kampanyalar</h1>
-            <p class="page-desc">Toplu mesaj kampanyaları</p>
+            <h1 class="page-title">Sequence'ler</h1>
+            <p class="page-desc">Müşteri takip akışları ve günlük görevler</p>
           </div>
-          <button class="btn-primary" id="bulk-msg-btn">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2L15 22 11 13 2 9l20-7z"/></svg>
-            Toplu Mesaj Gönder
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn-secondary" id="bulk-msg-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2L15 22 11 13 2 9l20-7z"/></svg>
+              Toplu Mesaj
+            </button>
+            <button class="btn-primary" id="new-sequence-btn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Yeni Sequence
+            </button>
+          </div>
+        </div>
+
+        <div class="seq-tabs">
+          <button class="seq-tab active" data-seqtab="list">Sequence'ler</button>
+          <button class="seq-tab" data-seqtab="tasks">
+            Görevlerim <span class="seq-tab-badge hidden" id="seq-tasks-badge">0</span>
           </button>
         </div>
-        <div id="campaigns-container"></div>
+
+        <div id="seq-tab-list" class="seq-tab-panel">
+          <div id="sequences-container"></div>
+        </div>
+        <div id="seq-tab-tasks" class="seq-tab-panel hidden">
+          <div id="seq-tasks-container"></div>
+        </div>
       </div>
 
     </div><!-- /pages-wrap -->
@@ -916,6 +939,68 @@
       <span id="xi-import-btn-text">İçe Aktar</span>
     </button>
     <button class="btn-primary hidden" id="xi-done-btn">Tamam</button>
+  </div>
+</div>
+
+<!-- ═══ SEQUENCE BUILDER MODAL ═══ -->
+<div id="seq-builder-backdrop" class="modal-backdrop hidden"></div>
+<div id="seq-builder-modal" class="modal modal-xl hidden">
+  <div class="modal-header">
+    <h2 class="modal-title" id="seq-builder-title">Yeni Sequence</h2>
+    <button class="modal-close" id="seq-builder-close">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="modal-body">
+    <input type="hidden" id="seq-edit-id"/>
+    <div class="seq-form-row">
+      <div style="flex:1">
+        <label class="cm-label">Sequence Adı *</label>
+        <input id="seq-name" type="text" class="cm-input" placeholder="örn. Soğuk Müşteri Takibi"/>
+      </div>
+    </div>
+    <div class="seq-form-row">
+      <div style="flex:1">
+        <label class="cm-label">Açıklama</label>
+        <input id="seq-desc" type="text" class="cm-input" placeholder="Bu akışın amacı (opsiyonel)"/>
+      </div>
+    </div>
+    <label class="seq-checkbox">
+      <input type="checkbox" id="seq-skip-weekends" checked/>
+      <span>Hafta sonuna denk gelen görevleri pazartesiye kaydır</span>
+    </label>
+
+    <div class="seq-steps-header">
+      <span class="drawer-section-title">Adımlar</span>
+      <button class="btn-secondary btn-sm" id="seq-add-step-btn">+ Adım Ekle</button>
+    </div>
+    <div id="seq-steps-list" class="seq-steps-list"></div>
+    <div id="seq-steps-empty" class="seq-steps-empty">Henüz adım yok. "+ Adım Ekle" ile başlayın.</div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn-secondary" id="seq-builder-cancel">İptal</button>
+    <button class="btn-primary" id="seq-save-btn">Kaydet</button>
+  </div>
+</div>
+
+<!-- ═══ ENROLL MODAL (müşteriyi sequence'e ekle) ═══ -->
+<div id="seq-enroll-backdrop" class="modal-backdrop hidden"></div>
+<div id="seq-enroll-modal" class="modal hidden">
+  <div class="modal-header">
+    <h2 class="modal-title">Sequence'e Ekle</h2>
+    <button class="modal-close" id="seq-enroll-close">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="modal-body">
+    <p class="seq-enroll-desc" id="seq-enroll-desc">Seçilen müşteriler bir takip akışına eklenecek.</p>
+    <label class="cm-label">Sequence Seç</label>
+    <select id="seq-enroll-select" class="cm-input"></select>
+    <div id="seq-enroll-info" class="seq-enroll-info"></div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn-secondary" id="seq-enroll-cancel">İptal</button>
+    <button class="btn-primary" id="seq-enroll-confirm">Ekle</button>
   </div>
 </div>
 

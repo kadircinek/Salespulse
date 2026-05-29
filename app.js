@@ -84,6 +84,12 @@ let state = {
   activities: [],
   users: [],
   stats: null,
+  // Sequence
+  sequences: [],
+  seqTasks: [],
+  seqTab: 'list',
+  seqBuilderSteps: [],
+  seqEnrollTargets: [],   // enroll edilecek müşteri id'leri
   // Session
   sessionActive: false,
   sessionSeconds: 0,
@@ -237,6 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (state.currentPage === 'customers') renderCustomers();
     else if (state.currentPage === 'offers') renderOffers();
     else if (state.currentPage === 'calls') renderCalls();
+    else if (state.currentPage === 'sequences') renderSequences();
   });
 
   // Mobile menu toggle
@@ -326,6 +333,20 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('bulk-modal-backdrop').addEventListener('click', closeBulkModal);
   document.getElementById('bulk-next').addEventListener('click', bulkNext);
   document.getElementById('bulk-back').addEventListener('click', bulkBack);
+
+  // ── Sequence sistemi ──
+  document.getElementById('new-sequence-btn').addEventListener('click', () => openSequenceBuilder());
+  document.getElementById('seq-builder-close').addEventListener('click', closeSequenceBuilder);
+  document.getElementById('seq-builder-cancel').addEventListener('click', closeSequenceBuilder);
+  document.getElementById('seq-builder-backdrop').addEventListener('click', closeSequenceBuilder);
+  document.getElementById('seq-add-step-btn').addEventListener('click', addBuilderStep);
+  document.getElementById('seq-save-btn').addEventListener('click', saveSequence);
+  document.getElementById('seq-enroll-close').addEventListener('click', closeEnrollModal);
+  document.getElementById('seq-enroll-cancel').addEventListener('click', closeEnrollModal);
+  document.getElementById('seq-enroll-backdrop').addEventListener('click', closeEnrollModal);
+  document.getElementById('seq-enroll-confirm').addEventListener('click', confirmEnroll);
+  document.querySelectorAll('.seq-tab').forEach(t =>
+    t.addEventListener('click', () => switchSeqTab(t.dataset.seqtab)));
 
   // Bulk select all
   document.getElementById('bulk-select-all').addEventListener('change', (e) => {
@@ -532,7 +553,7 @@ const PAGE_TITLES = {
   customers:   'Müşteriler',
   offers:      'Teklifler',
   performance: 'Performans',
-  campaigns:   'Kampanyalar',
+  sequences:   "Sequence'ler",
 };
 
 function navigateTo(page) {
@@ -555,7 +576,7 @@ function navigateTo(page) {
   else if (page === 'offers')      renderOffers();
   else if (page === 'calls')       renderCalls();
   else if (page === 'performance') renderPerformance();
-  else if (page === 'campaigns')   renderCampaigns();
+  else if (page === 'sequences')   renderSequences();
 }
 
 /* ──────────────────────────────────────────────
@@ -636,6 +657,51 @@ async function renderDashboard() {
   renderFeed('d-overdue-list', overdue,   renderActivityFeedItem,'Geciken görev yok');
   renderFeed('d-pending-list', pending,   renderActivityFeedItem,'Bekleyen takip yok');
   renderFeed('d-calls-list',   callList.slice(0,5), renderCallFeedItem, 'Aranacak müşteri yok');
+
+  // Sequence görev widget'ı
+  renderSeqDashWidget();
+}
+
+// Dashboard'da bugünkü sequence görevleri özeti
+async function renderSeqDashWidget() {
+  const el = document.getElementById('seq-dash-widget');
+  if (!el || state.isDemoMode) { if (el) el.innerHTML = ''; return; }
+
+  const tasks = await fetchSeqTasks();
+  state.seqTasks = tasks;
+  updateSeqTasksBadge();
+
+  if (!tasks.length) { el.innerHTML = ''; return; }
+
+  const preview = tasks.slice(0, 4).map(t => {
+    const cfg = SEQ_STEP_TYPES[t.step_type] || { icon: '•', label: t.step_type, bg:'#F3F4F6', color:'#6B7280' };
+    return `
+      <div class="seq-task-row" style="margin-bottom:6px">
+        <div class="seq-task-icon" style="background:${cfg.bg};color:${cfg.color}">${cfg.icon}</div>
+        <div class="seq-task-main">
+          <div class="seq-task-company">${escapeHtml(t.company_name)}</div>
+          <div class="seq-task-meta">${cfg.label} · ${escapeHtml(t.sequence_name||'')}</div>
+        </div>
+        <div class="seq-task-actions">
+          <button class="seq-task-btn done" onclick="completeSeqTaskFromDash('${t.id}')">✓</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="seq-widget">
+      <div class="seq-widget-head">
+        <div class="seq-widget-title">🔁 Sequence Görevleri <span class="seq-widget-count">${tasks.length}</span></div>
+        <span class="seq-widget-link" onclick="navigateTo('sequences');switchSeqTab('tasks')">Tümünü Gör →</span>
+      </div>
+      ${preview}
+      ${tasks.length > 4 ? `<div style="text-align:center;font-size:12px;color:var(--text-tertiary);margin-top:8px">+${tasks.length - 4} görev daha</div>` : ''}
+    </div>`;
+}
+
+async function completeSeqTaskFromDash(id) {
+  await completeSeqTask(id, 'done');
+  renderSeqDashWidget();
 }
 
 // Feature 1: Yeni müşteri bildirimi
@@ -899,51 +965,318 @@ function logCall(customerId) {
 /* ──────────────────────────────────────────────
    Campaigns
 ────────────────────────────────────────────── */
-async function renderCampaigns() {
-  const campaigns = state.isDemoMode ? DEMO_CAMPAIGNS : await fetchCampaigns();
-  const container = document.getElementById('campaigns-container');
+/* ──────────────────────────────────────────────
+   SEQUENCE (CADENCE) SİSTEMİ
+────────────────────────────────────────────── */
 
-  if (!campaigns.length) {
-    container.innerHTML = '<div style="text-align:center;padding:48px;color:var(--text-tertiary)">Henüz kampanya yok</div>';
+// Adım tipi metadata
+const SEQ_STEP_TYPES = {
+  call:              { label: 'Telefon Araması',        icon: '📞', bg: '#FAF5FF', color: '#9333EA' },
+  email:             { label: 'E-posta',                 icon: '📧', bg: '#EFF6FF', color: '#2563EB' },
+  linkedin_connect:  { label: 'LinkedIn Bağlantı',       icon: '💼', bg: '#EFF6FF', color: '#0A66C2' },
+  linkedin_message:  { label: 'LinkedIn Mesaj',          icon: '💬', bg: '#EFF6FF', color: '#0A66C2' },
+  whatsapp:          { label: 'WhatsApp',                icon: '🟢', bg: '#F0FDF4', color: '#16A34A' },
+};
+const SEQ_STATUS_LABELS = { active: 'Aktif', paused: 'Duraklatıldı', archived: 'Arşiv' };
+
+// ── API yardımcıları ──
+async function fetchSequences()    { try { return await apiFetch('/api/sequences'); } catch { return []; } }
+async function fetchSeqTasks()     { try { return await apiFetch('/api/sequence-tasks'); } catch { return []; } }
+
+// ── Ana render ──
+async function renderSequences() {
+  if (state.isDemoMode) {
+    document.getElementById('sequences-container').innerHTML =
+      '<div style="text-align:center;padding:48px;color:var(--text-tertiary)">Sequence özelliği canlı modda kullanılır. Lütfen giriş yapın.</div>';
+    return;
+  }
+  state.sequences = await fetchSequences();
+  state.seqTasks  = await fetchSeqTasks();
+  updateSeqTasksBadge();
+  if (state.seqTab === 'tasks') renderSeqTasks();
+  else renderSeqList();
+}
+
+function switchSeqTab(tab) {
+  state.seqTab = tab;
+  document.querySelectorAll('.seq-tab').forEach(t => t.classList.toggle('active', t.dataset.seqtab === tab));
+  document.getElementById('seq-tab-list').classList.toggle('hidden', tab !== 'list');
+  document.getElementById('seq-tab-tasks').classList.toggle('hidden', tab !== 'tasks');
+  if (tab === 'tasks') renderSeqTasks(); else renderSeqList();
+}
+
+function updateSeqTasksBadge() {
+  const n = state.seqTasks.length;
+  const badge = document.getElementById('seq-tasks-badge');
+  if (badge) {
+    badge.textContent = n;
+    badge.classList.toggle('hidden', n === 0);
+  }
+  const sb = document.getElementById('sb-badge-sequences');
+  if (sb) sb.textContent = n > 0 ? n : '';
+}
+
+// ── Sequence listesi ──
+function renderSeqList() {
+  const container = document.getElementById('sequences-container');
+  if (!state.sequences.length) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:48px;color:var(--text-tertiary)">
+        <div style="font-size:40px;margin-bottom:8px">🔁</div>
+        <div style="font-weight:600;color:var(--text-secondary);margin-bottom:4px">Henüz sequence yok</div>
+        <div style="font-size:13px">"Yeni Sequence" ile ilk takip akışınızı oluşturun.</div>
+      </div>`;
     return;
   }
 
-  container.innerHTML = `<div class="campaigns-grid">${campaigns.map(camp => {
-    const statusCfg = camp.status === 'active'
-      ? { bg: '#F0FDF4', color: '#15803D', label: 'Aktif' }
-      : { bg: '#F1F5F9', color: '#64748B', label: 'Taslak' };
-    const openRate  = camp.sent_count ? Math.round(camp.opened_count  / camp.sent_count * 100) : 0;
-    const replyRate = camp.sent_count ? Math.round(camp.replied_count / camp.sent_count * 100) : 0;
-
+  container.innerHTML = `<div class="seq-grid">${state.sequences.map(s => {
+    const stepCount = +s.step_count || 0;
+    const active    = +s.active_count || 0;
+    const status    = s.status || 'active';
     return `
-      <div class="campaign-card">
-        <div class="campaign-header">
+      <div class="seq-card" onclick="openSequenceBuilder('${s.id}')">
+        <div class="seq-card-head">
           <div>
-            <div class="campaign-name">${camp.name}</div>
-            <div class="campaign-type">${camp.campaign_type === 'whatsapp' ? '💬 WhatsApp' : '📧 E-posta'} Kampanyası</div>
+            <div class="seq-card-name">${escapeHtml(s.name)}</div>
+            ${s.description ? `<div class="seq-card-desc">${escapeHtml(s.description)}</div>` : ''}
           </div>
-          <span class="status-pill" style="background:${statusCfg.bg};color:${statusCfg.color}">${statusCfg.label}</span>
+          <span class="seq-status ${status}">${SEQ_STATUS_LABELS[status] || status}</span>
         </div>
-        <div class="campaign-stats">
-          <div>
-            <div class="campaign-stat-value" style="color:var(--accent)">${camp.sent_count}</div>
-            <div class="campaign-stat-label">Gönderildi</div>
-          </div>
-          <div>
-            <div class="campaign-stat-value" style="color:var(--purple)">${openRate}%</div>
-            <div class="campaign-stat-label">Açılma</div>
-          </div>
-          <div>
-            <div class="campaign-stat-value" style="color:var(--orange)">${replyRate}%</div>
-            <div class="campaign-stat-label">Yanıt</div>
-          </div>
-          <div>
-            <div class="campaign-stat-value" style="color:var(--green)">${camp.sold_count}</div>
-            <div class="campaign-stat-label">Satış</div>
-          </div>
+        <div class="seq-card-stats">
+          <div><div class="seq-card-stat-val">${stepCount}</div><div class="seq-card-stat-lbl">Adım</div></div>
+          <div><div class="seq-card-stat-val">${active}</div><div class="seq-card-stat-lbl">Aktif Müşteri</div></div>
+          <div><div class="seq-card-stat-val">${+s.total_enrolled || 0}</div><div class="seq-card-stat-lbl">Toplam Kayıt</div></div>
+        </div>
+        <div class="seq-card-actions" onclick="event.stopPropagation()">
+          <button class="btn-secondary btn-sm" onclick="openSequenceBuilder('${s.id}')">Düzenle</button>
+          <button class="btn-secondary btn-sm" onclick="deleteSequence('${s.id}','${escapeHtml(s.name).replace(/'/g,"\\'")}')" style="color:#DC2626;border-color:#FCA5A5">Sil</button>
         </div>
       </div>`;
   }).join('')}</div>`;
+}
+
+// ── Görevlerim (bugünkü görevler) ──
+function renderSeqTasks() {
+  const container = document.getElementById('seq-tasks-container');
+  if (!state.seqTasks.length) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:48px;color:var(--text-tertiary)">
+        <div style="font-size:40px;margin-bottom:8px">✅</div>
+        <div style="font-weight:600;color:var(--text-secondary)">Bugün için görev yok</div>
+        <div style="font-size:13px;margin-top:4px">Tüm takip görevlerini tamamladınız.</div>
+      </div>`;
+    return;
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const overdue = state.seqTasks.filter(t => t.due_date < today);
+  const todayTasks = state.seqTasks.filter(t => t.due_date >= today);
+
+  const groupHtml = (title, tasks, isOverdue) => !tasks.length ? '' : `
+    <div class="seq-task-group">
+      <div class="seq-task-group-title">${title} <span style="color:var(--text-tertiary)">(${tasks.length})</span></div>
+      ${tasks.map(t => seqTaskRow(t, isOverdue)).join('')}
+    </div>`;
+
+  container.innerHTML =
+    groupHtml('⚠️ Gecikmiş', overdue, true) +
+    groupHtml('📅 Bugün ve sonrası', todayTasks, false);
+}
+
+function seqTaskRow(t, isOverdue) {
+  const cfg = SEQ_STEP_TYPES[t.step_type] || { label: t.step_type, icon: '•', bg: '#F3F4F6', color: '#6B7280' };
+  const contact = t.contact_name ? ` · ${escapeHtml(t.contact_name)}` : '';
+  // Tip bazlı hızlı aksiyon linki
+  let actionLink = '';
+  if (t.step_type === 'call' && t.phone)        actionLink = `<a href="tel:${t.phone}" class="seq-task-btn" onclick="event.stopPropagation()">📞 Ara</a>`;
+  else if (t.step_type === 'email' && t.email)  actionLink = `<a href="mailto:${t.email}?subject=${encodeURIComponent(t.subject||'')}" class="seq-task-btn" onclick="event.stopPropagation()">📧 Yaz</a>`;
+  else if (t.step_type === 'whatsapp' && t.phone) actionLink = `<a href="https://wa.me/${formatWhatsApp(t.phone)}" target="_blank" class="seq-task-btn" onclick="event.stopPropagation()">🟢 Aç</a>`;
+  else if ((t.step_type === 'linkedin_connect' || t.step_type === 'linkedin_message'))
+    actionLink = `<a href="https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(t.company_name||'')}" target="_blank" class="seq-task-btn" onclick="event.stopPropagation()">💼 Aç</a>`;
+
+  return `
+    <div class="seq-task-row ${isOverdue ? 'overdue' : ''}">
+      <div class="seq-task-icon" style="background:${cfg.bg};color:${cfg.color}">${cfg.icon}</div>
+      <div class="seq-task-main">
+        <div class="seq-task-company">${escapeHtml(t.company_name)}${contact}</div>
+        <div class="seq-task-meta">${cfg.label} · ${escapeHtml(t.sequence_name||'')} · ${formatDate(t.due_date)}</div>
+        ${t.subject ? `<div class="seq-task-subject">"${escapeHtml(t.subject)}"</div>` : ''}
+      </div>
+      <div class="seq-task-actions">
+        ${actionLink}
+        <button class="seq-task-btn done" onclick="completeSeqTask('${t.id}','done')">✓ Yapıldı</button>
+        <button class="seq-task-btn skip" onclick="completeSeqTask('${t.id}','skipped')">Atla</button>
+      </div>
+    </div>`;
+}
+
+async function completeSeqTask(id, status) {
+  try {
+    await apiFetch(`/api/sequence-tasks?id=${id}`, { method: 'PUT', body: { status } });
+    state.seqTasks = state.seqTasks.filter(t => t.id !== id);
+    updateSeqTasksBadge();
+    renderSeqTasks();
+    if (typeof showToast === 'function') showToast(status === 'done' ? 'Görev tamamlandı' : 'Görev atlandı');
+  } catch (e) {
+    alert('Hata: ' + e.message);
+  }
+}
+
+// ── Builder (yeni / düzenle) ──
+async function openSequenceBuilder(id) {
+  state.seqBuilderSteps = [];
+  document.getElementById('seq-edit-id').value = id || '';
+  document.getElementById('seq-builder-title').textContent = id ? 'Sequence Düzenle' : 'Yeni Sequence';
+
+  if (id) {
+    try {
+      const seq = await apiFetch(`/api/sequences?id=${id}`);
+      document.getElementById('seq-name').value = seq.name || '';
+      document.getElementById('seq-desc').value = seq.description || '';
+      document.getElementById('seq-skip-weekends').checked = seq.skip_weekends !== false;
+      state.seqBuilderSteps = (seq.steps || []).map(s => ({
+        step_type: s.step_type, day_offset: s.day_offset, subject: s.subject || '', body: s.body || '',
+      }));
+    } catch (e) { alert('Sequence yüklenemedi: ' + e.message); return; }
+  } else {
+    document.getElementById('seq-name').value = '';
+    document.getElementById('seq-desc').value = '';
+    document.getElementById('seq-skip-weekends').checked = true;
+    state.seqBuilderSteps = [{ step_type: 'call', day_offset: 1, subject: '', body: '' }];
+  }
+
+  renderBuilderSteps();
+  document.getElementById('seq-builder-backdrop').classList.remove('hidden');
+  document.getElementById('seq-builder-modal').classList.remove('hidden');
+}
+
+function closeSequenceBuilder() {
+  document.getElementById('seq-builder-backdrop').classList.add('hidden');
+  document.getElementById('seq-builder-modal').classList.add('hidden');
+}
+
+function renderBuilderSteps() {
+  const list  = document.getElementById('seq-steps-list');
+  const empty = document.getElementById('seq-steps-empty');
+  empty.classList.toggle('hidden', state.seqBuilderSteps.length > 0);
+
+  list.innerHTML = state.seqBuilderSteps.map((s, i) => {
+    const typeOpts = Object.entries(SEQ_STEP_TYPES).map(([k, v]) =>
+      `<option value="${k}" ${s.step_type === k ? 'selected' : ''}>${v.icon} ${v.label}</option>`).join('');
+    const showSubject = s.step_type === 'email';
+    return `
+      <div class="seq-step-row">
+        <div class="seq-step-num">${i + 1}</div>
+        <div class="seq-step-fields">
+          <div class="seq-step-top">
+            <select class="seq-step-select" onchange="updateBuilderStep(${i},'step_type',this.value)">${typeOpts}</select>
+            <span class="seq-step-day-label">Gün</span>
+            <input type="number" min="1" class="seq-step-day" value="${s.day_offset}" onchange="updateBuilderStep(${i},'day_offset',this.value)"/>
+          </div>
+          ${showSubject ? `<input class="seq-step-input" placeholder="E-posta konusu" value="${escapeAttr(s.subject)}" onchange="updateBuilderStep(${i},'subject',this.value)"/>` : ''}
+          <textarea class="seq-step-input seq-step-textarea" placeholder="${showSubject ? 'E-posta şablonu / notlar' : 'Not / şablon (opsiyonel)'}" onchange="updateBuilderStep(${i},'body',this.value)">${escapeHtml(s.body)}</textarea>
+        </div>
+        <button class="seq-step-del" onclick="removeBuilderStep(${i})" title="Adımı sil">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+        </button>
+      </div>`;
+  }).join('');
+}
+
+function updateBuilderStep(i, field, val) {
+  if (!state.seqBuilderSteps[i]) return;
+  state.seqBuilderSteps[i][field] = field === 'day_offset' ? Math.max(1, parseInt(val, 10) || 1) : val;
+  if (field === 'step_type') renderBuilderSteps(); // konu alanı görünürlüğü değişebilir
+}
+function addBuilderStep() {
+  const last = state.seqBuilderSteps[state.seqBuilderSteps.length - 1];
+  const nextDay = last ? last.day_offset + 1 : 1;
+  state.seqBuilderSteps.push({ step_type: 'call', day_offset: nextDay, subject: '', body: '' });
+  renderBuilderSteps();
+}
+function removeBuilderStep(i) {
+  state.seqBuilderSteps.splice(i, 1);
+  renderBuilderSteps();
+}
+
+async function saveSequence() {
+  const name = document.getElementById('seq-name').value.trim();
+  if (!name) { alert('Sequence adı gerekli'); return; }
+  if (!state.seqBuilderSteps.length) { alert('En az bir adım ekleyin'); return; }
+
+  const payload = {
+    name,
+    description:   document.getElementById('seq-desc').value.trim(),
+    skip_weekends: document.getElementById('seq-skip-weekends').checked,
+    steps: state.seqBuilderSteps,
+  };
+  const id = document.getElementById('seq-edit-id').value;
+  try {
+    if (id) await apiFetch(`/api/sequences?id=${id}`, { method: 'PUT', body: payload });
+    else    await apiFetch('/api/sequences', { method: 'POST', body: payload });
+    closeSequenceBuilder();
+    await renderSequences();
+    if (typeof showToast === 'function') showToast(id ? 'Sequence güncellendi' : 'Sequence oluşturuldu');
+  } catch (e) { alert('Kaydedilemedi: ' + e.message); }
+}
+
+async function deleteSequence(id, name) {
+  if (!confirm(`"${name}" sequence'i silinsin mi? Tüm kayıtlar ve görevler de silinecek.`)) return;
+  try {
+    await apiFetch(`/api/sequences?id=${id}`, { method: 'DELETE' });
+    await renderSequences();
+    if (typeof showToast === 'function') showToast('Sequence silindi');
+  } catch (e) { alert('Silinemedi: ' + e.message); }
+}
+
+// ── Müşteriyi sequence'e ekle (enroll) ──
+async function openEnrollModal(customerIds) {
+  state.seqEnrollTargets = Array.isArray(customerIds) ? customerIds : [customerIds];
+  if (!state.seqEnrollTargets.length) { alert('Müşteri seçilmedi'); return; }
+
+  // Sequence'ler henüz yüklenmediyse çek
+  if (!state.sequences.length) state.sequences = await fetchSequences();
+
+  const sel = document.getElementById('seq-enroll-select');
+  const active = state.sequences.filter(s => (s.status || 'active') === 'active' && +s.step_count > 0);
+  if (!active.length) {
+    alert('Önce adımları olan aktif bir sequence oluşturun.');
+    return;
+  }
+  sel.innerHTML = active.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${s.step_count} adım)</option>`).join('');
+  document.getElementById('seq-enroll-desc').textContent =
+    `${state.seqEnrollTargets.length} müşteri seçilen takip akışına eklenecek.`;
+  document.getElementById('seq-enroll-info').textContent = '';
+  document.getElementById('seq-enroll-backdrop').classList.remove('hidden');
+  document.getElementById('seq-enroll-modal').classList.remove('hidden');
+}
+function closeEnrollModal() {
+  document.getElementById('seq-enroll-backdrop').classList.add('hidden');
+  document.getElementById('seq-enroll-modal').classList.add('hidden');
+}
+async function confirmEnroll() {
+  const sequenceId = document.getElementById('seq-enroll-select').value;
+  if (!sequenceId) return;
+  try {
+    const res = await apiFetch('/api/sequence-enrollments', {
+      method: 'POST',
+      body: { sequence_id: sequenceId, customer_ids: state.seqEnrollTargets },
+    });
+    closeEnrollModal();
+    const msg = `${res.enrolled} müşteri eklendi, ${res.tasks_created} görev oluşturuldu` +
+                (res.skipped ? ` (${res.skipped} atlandı)` : '');
+    if (typeof showToast === 'function') showToast(msg); else alert(msg);
+    if (state.currentPage === 'sequences') await renderSequences();
+  } catch (e) { alert('Eklenemedi: ' + e.message); }
+}
+
+// ── Yardımcı: HTML escape ──
+function escapeHtml(str) {
+  return (str == null ? '' : String(str))
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function escapeAttr(str) {
+  return escapeHtml(str).replace(/"/g,'&quot;');
 }
 
 /* ──────────────────────────────────────────────
@@ -977,6 +1310,13 @@ async function showCustomerDrawer(id) {
     catch { custActivities = []; }
   } else {
     custActivities = DEMO_ACTIVITIES.filter(a => a.customer_id === id);
+  }
+
+  // Sequence kayıtları
+  let custEnrollments = [];
+  if (!state.isDemoMode && c.id) {
+    try { custEnrollments = await apiFetch(`/api/sequence-enrollments?customer_id=${c.id}`); }
+    catch { custEnrollments = []; }
   }
 
   // Related offers
@@ -1050,9 +1390,33 @@ async function showCustomerDrawer(id) {
       ${c.email ? `<a href="mailto:${c.email}" class="btn-ghost" style="font-size:12px;padding:7px 14px">📧 Mail</a>` : ''}
     </div>`;
 
+  // Sequence bölümü (sadece canlı modda)
+  const seqHtml = state.isDemoMode ? '' : (() => {
+    const active = custEnrollments.filter(e => e.status === 'active');
+    const rows = custEnrollments.length
+      ? custEnrollments.map(e => {
+          const stCfg = { active:['Aktif','var(--green)'], completed:['Tamamlandı','var(--accent)'],
+                          stopped:['Durduruldu','var(--text-tertiary)'], paused:['Duraklatıldı','var(--orange)'] }[e.status] || [e.status,'var(--text-tertiary)'];
+          return `<div class="drawer-row">
+            <span class="drawer-row-label">${escapeHtml(e.sequence_name)}</span>
+            <span class="drawer-row-value" style="color:${stCfg[1]};font-weight:600;font-size:12px">${stCfg[0]}</span>
+          </div>`;
+        }).join('')
+      : '<div style="color:var(--text-tertiary);font-size:13px;padding:4px 0">Henüz bir akışa eklenmemiş</div>';
+    return `
+      <div class="drawer-section">
+        <div class="drawer-section-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span>Sequence'ler</span>
+          ${!active.length ? `<button class="btn-secondary btn-sm" onclick="openEnrollModal('${c.id}')">+ Ekle</button>` : ''}
+        </div>
+        ${rows}
+      </div>`;
+  })();
+
   document.getElementById('drawer-body').innerHTML = `
     ${contactBtns}
     ${assignHtml}
+    ${seqHtml}
     <div class="drawer-section">
       <div class="drawer-section-title">Bilgiler</div>
       <div class="drawer-row"><span class="drawer-row-label">Durum</span><span>${statusPill(c.status, STATUS_CONFIG)}</span></div>

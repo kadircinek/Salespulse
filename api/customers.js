@@ -90,6 +90,26 @@ module.exports = async (req, res) => {
         RETURNING *
       `;
       if (!rows[0]) return res.status(404).json({ error: 'Müşteri bulunamadı' });
+
+      // Akıllı davranış: müşteri satıldı/kaybedildiyse aktif sequence kayıtlarını durdur
+      if (status === 'sold' || status === 'lost') {
+        try {
+          await sql`
+            UPDATE sequence_enrollments
+            SET status = 'stopped', stop_reason = ${status}, completed_at = NOW()
+            WHERE customer_id = ${id} AND status = 'active'
+          `;
+          await sql`
+            UPDATE sequence_tasks t
+            SET status = 'skipped'
+            FROM sequence_enrollments e
+            WHERE t.enrollment_id = e.id
+              AND e.customer_id = ${id}
+              AND t.status = 'pending'
+          `;
+        } catch (e) { /* sequence tabloları henüz yoksa sessiz geç */ }
+      }
+
       return res.json(rows[0]);
     }
 

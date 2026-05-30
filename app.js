@@ -58,10 +58,6 @@ const DEMO_ACTIVITIES = [
   { id: 'a7', customer_id: 'c9',  activity_type: 'whatsapp',        status: 'pending',        scheduled_at: new Date(Date.now()+7200000).toISOString(),   note: 'Fiyat gönder',  company_name: 'Türk Boya Kimya Ltd.' },
 ];
 
-const DEMO_CAMPAIGNS = [
-  { id: 'camp1', name: 'Mayıs Bahar Kampanyası', campaign_type: 'whatsapp', status: 'active', sent_count: 245, opened_count: 178, replied_count: 42, sold_count: 12, target_count: 300 },
-  { id: 'camp2', name: 'Yeni Ürün Tanıtım',      campaign_type: 'email',    status: 'draft',  sent_count: 0,   opened_count: 0,   replied_count: 0,  sold_count: 0,  target_count: 150 },
-];
 
 /* ──────────────────────────────────────────────
    State
@@ -2270,12 +2266,6 @@ async function fetchOffers() {
 async function fetchActivities() {
   if (state.isDemoMode) return DEMO_ACTIVITIES;
   try { return await apiFetch('/api/activities'); }
-  catch { return []; }
-}
-
-async function fetchCampaigns() {
-  if (state.isDemoMode) return DEMO_CAMPAIGNS;
-  try { return await apiFetch('/api/campaigns'); }
   catch { return []; }
 }
 

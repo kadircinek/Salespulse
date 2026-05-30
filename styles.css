@@ -1763,6 +1763,25 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 }
 .btn-wa:hover { background: #1db955; }
 
+.btn-linkedin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #0A66C2;
+  color: white;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .15s;
+  border: none;
+}
+.btn-linkedin:hover { background: #084d92; }
+.drawer-linkedin { color: #0A66C2 !important; font-size: 12px; font-weight: 600; text-decoration: none; }
+.drawer-linkedin:hover { text-decoration: underline; }
+
 /* ══════════════════════════════════════════════
    Feature 5 + 8: Performance Page
 ══════════════════════════════════════════════ */
@@ -2409,3 +2428,12 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 }
 .dash-row-done:hover { background: var(--green); color: white; }
 .dash-more { text-align: center; font-size: 12px; color: var(--text-tertiary); padding: 8px 0 2px; }
+
+/* Tablo içi LinkedIn ikonu */
+.contact-cell { display: inline-flex; align-items: center; gap: 7px; }
+.li-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 5px;
+  background: #EFF6FF; color: #0A66C2; flex-shrink: 0; transition: background .15s;
+}
+.li-icon:hover { background: #0A66C2; color: white; }

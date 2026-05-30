@@ -842,7 +842,12 @@ async function renderCustomers(search = document.getElementById('customer-search
             </div>
           </div>
         </td>
-        <td>${c.contact_name}</td>
+        <td>
+          <span class="contact-cell">
+            ${c.contact_name || '<span style="color:var(--text-tertiary)">–</span>'}
+            ${c.linkedin_url ? `<a href="${normalizeUrl(c.linkedin_url)}" target="_blank" onclick="event.stopPropagation()" class="li-icon" title="LinkedIn profilini aç"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.13 1.45-2.13 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 110-4.13 2.06 2.06 0 010 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.22.79 24 1.77 24h20.45c.98 0 1.78-.78 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/></svg></a>` : ''}
+          </span>
+        </td>
         <td>${c.phone || '-'}</td>
         <td>${c.email ? `<a href="mailto:${c.email}" onclick="event.stopPropagation()" class="email-link" title="${c.email}">${c.email}</a>` : '<span style="color:var(--text-tertiary)">–</span>'}</td>
         <td>${c.sector || '-'}</td>
@@ -1318,6 +1323,24 @@ function escapeAttr(str) {
   return escapeHtml(str).replace(/"/g,'&quot;');
 }
 
+// URL'i normalize et (http yoksa https ekle)
+function normalizeUrl(url) {
+  const u = (url || '').trim();
+  if (!u) return '';
+  return /^https?:\/\//i.test(u) ? u : 'https://' + u;
+}
+
+// Drawer için LinkedIn butonu — profil varsa direkt aç, yoksa arama
+function linkedinBtn(c) {
+  if (c.linkedin_url) {
+    return `<a href="${normalizeUrl(c.linkedin_url)}" target="_blank" class="btn-linkedin" style="font-size:12px;padding:7px 14px" title="${escapeAttr(c.linkedin_url)}">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.13 1.45-2.13 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 110-4.13 2.06 2.06 0 010 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.22.79 24 1.77 24h20.45c.98 0 1.78-.78 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/></svg>
+      LinkedIn
+    </a>`;
+  }
+  return '';  // profil yoksa drawer butonu gösterme (Bilgiler bölümünde arama linki var)
+}
+
 /* ──────────────────────────────────────────────
    Customer Detail Drawer (Feature 4, 6, 9)
 ────────────────────────────────────────────── */
@@ -1427,6 +1450,7 @@ async function showCustomerDrawer(id) {
           WhatsApp
         </a>` : ''}
       ${c.email ? `<a href="mailto:${c.email}" class="btn-ghost" style="font-size:12px;padding:7px 14px">📧 Mail</a>` : ''}
+      ${linkedinBtn(c)}
     </div>`;
 
   // Sequence bölümü (sadece canlı modda)
@@ -1463,6 +1487,12 @@ async function showCustomerDrawer(id) {
       <div class="drawer-row"><span class="drawer-row-label">Şehir</span><span class="drawer-row-value">${c.city||'-'}</span></div>
       <div class="drawer-row"><span class="drawer-row-label">Son Görüşme</span><span class="drawer-row-value">${timeAgo(c.last_contacted)}</span></div>
       ${c.website ? `<div class="drawer-row"><span class="drawer-row-label">Web</span><a href="${c.website}" target="_blank" class="drawer-row-value" style="color:var(--accent);font-size:12px">${c.website}</a></div>` : ''}
+      <div class="drawer-row">
+        <span class="drawer-row-label">LinkedIn</span>
+        ${c.linkedin_url
+          ? `<a href="${normalizeUrl(c.linkedin_url)}" target="_blank" class="drawer-row-value drawer-linkedin" title="${escapeAttr(c.linkedin_url)}">💼 Profili Aç</a>`
+          : `<a href="https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent((c.contact_name||'') + ' ' + c.company_name)}" target="_blank" class="drawer-row-value" style="color:var(--text-tertiary);font-size:12px">🔍 LinkedIn'de Ara</a>`}
+      </div>
     </div>
     <div class="drawer-section">
       <div class="drawer-section-title">Teklifler (${custOffers.length})</div>
@@ -2084,7 +2114,7 @@ function openCustomerModal(mode, customerId) {
 
   // Formu sıfırla
   const fields = ['cm-company','cm-sector','cm-city','cm-website','cm-fitscore',
-                   'cm-contact','cm-title','cm-phone','cm-email','cm-notes'];
+                   'cm-contact','cm-title','cm-phone','cm-email','cm-linkedin','cm-notes'];
   fields.forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('cm-status').value   = 'new';
   document.getElementById('cm-assigned').value = '';
@@ -2109,6 +2139,7 @@ function openCustomerModal(mode, customerId) {
       document.getElementById('cm-title').value    = c.title         || '';
       document.getElementById('cm-phone').value    = c.phone         || '';
       document.getElementById('cm-email').value    = c.email         || '';
+      document.getElementById('cm-linkedin').value = c.linkedin_url  || '';
       document.getElementById('cm-notes').value    = c.notes         || '';
       document.getElementById('cm-status').value   = c.status        || 'new';
       if (c.assigned_user_id) document.getElementById('cm-assigned').value = c.assigned_user_id;
@@ -2151,6 +2182,7 @@ async function submitCustomerModal() {
     title:            document.getElementById('cm-title').value.trim(),
     phone:            document.getElementById('cm-phone').value.trim(),
     email:            document.getElementById('cm-email').value.trim().toLowerCase(),
+    linkedin_url:     document.getElementById('cm-linkedin').value.trim(),
     notes:            document.getElementById('cm-notes').value.trim(),
     status:           document.getElementById('cm-status').value,
     assigned_user_id: document.getElementById('cm-assigned').value || null,

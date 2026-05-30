@@ -274,96 +274,48 @@
           </div>
         </div>
 
-        <!-- Sequence görev widget'ı -->
-        <div id="seq-dash-widget"></div>
-
+        <!-- Sequence KPI satırı -->
         <div class="kpi-row">
           <div class="kpi-card kpi-blue">
             <div class="kpi-top">
-              <span class="kpi-label">Bugün Arama</span>
-              <div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.06 1.18 2 2 0 012.03 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006.29 6.29l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg></div>
+              <span class="kpi-label">Bugün Görev</span>
+              <div class="kpi-icon">📋</div>
             </div>
-            <div class="kpi-val" id="kpi-calls">8</div>
-            <div class="kpi-sub">Hedef: 20</div>
-            <div class="kpi-bar"><div class="kpi-bar-fill" style="width:40%;background:#3B82F6"></div></div>
-          </div>
-          <div class="kpi-card kpi-green">
-            <div class="kpi-top">
-              <span class="kpi-label">WhatsApp</span>
-              <div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
-            </div>
-            <div class="kpi-val" id="kpi-wa">3</div>
-            <div class="kpi-sub">Gönderildi</div>
-            <div class="kpi-bar"><div class="kpi-bar-fill" style="width:15%;background:#22C55E"></div></div>
+            <div class="kpi-val" id="kpi-seq-today">0</div>
+            <div class="kpi-sub">yapılacak adım</div>
           </div>
           <div class="kpi-card kpi-orange">
             <div class="kpi-top">
-              <span class="kpi-label">E-posta</span>
-              <div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
+              <span class="kpi-label">Gecikmiş</span>
+              <div class="kpi-icon">⚠️</div>
             </div>
-            <div class="kpi-val" id="kpi-email">2</div>
-            <div class="kpi-sub">Gönderildi</div>
-            <div class="kpi-bar"><div class="kpi-bar-fill" style="width:10%;background:#F97316"></div></div>
+            <div class="kpi-val" id="kpi-seq-overdue">0</div>
+            <div class="kpi-sub">vadesi geçti</div>
           </div>
           <div class="kpi-card kpi-purple">
             <div class="kpi-top">
-              <span class="kpi-label">Teklif Takip</span>
-              <div class="kpi-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+              <span class="kpi-label">Aktif Akış</span>
+              <div class="kpi-icon">🔄</div>
             </div>
-            <div class="kpi-val" id="kpi-offers">0</div>
-            <div class="kpi-sub">Bekliyor</div>
-            <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-offers-bar" style="width:0%;background:#A855F7"></div></div>
+            <div class="kpi-val" id="kpi-seq-active">0</div>
+            <div class="kpi-sub">takipteki müşteri</div>
+          </div>
+          <div class="kpi-card kpi-green">
+            <div class="kpi-top">
+              <span class="kpi-label">Bugün Tamamlanan</span>
+              <div class="kpi-icon">✅</div>
+            </div>
+            <div class="kpi-val" id="kpi-seq-done">0</div>
+            <div class="kpi-sub">görev bitti</div>
           </div>
         </div>
 
-        <div class="dash-grid">
-          <!-- Due Offers -->
-          <div class="dash-card">
-            <div class="card-head">
-              <div class="card-head-left">
-                <div class="card-dot orange"></div>
-                <h3>Teklif Takipleri</h3>
-              </div>
-              <span class="pill pill-orange" id="d-offers-count">0</span>
-            </div>
-            <div id="d-offers-list" class="feed"></div>
-          </div>
-
-          <!-- Overdue -->
-          <div class="dash-card">
-            <div class="card-head">
-              <div class="card-head-left">
-                <div class="card-dot red"></div>
-                <h3>Geciken Görevler</h3>
-              </div>
-              <span class="pill pill-red" id="d-overdue-count">0</span>
-            </div>
-            <div id="d-overdue-list" class="feed"></div>
-          </div>
-
-          <!-- Pending -->
-          <div class="dash-card">
-            <div class="card-head">
-              <div class="card-head-left">
-                <div class="card-dot blue"></div>
-                <h3>Bekleyen Takipler</h3>
-              </div>
-              <span class="pill pill-blue" id="d-pending-count">0</span>
-            </div>
-            <div id="d-pending-list" class="feed"></div>
-          </div>
-
-          <!-- Today's Calls -->
-          <div class="dash-card">
-            <div class="card-head">
-              <div class="card-head-left">
-                <div class="card-dot green"></div>
-                <h3>Bugün Aranacaklar</h3>
-              </div>
-            </div>
-            <div id="d-calls-list" class="feed"></div>
-          </div>
+        <!-- Bugünkü sequence görevleri — kanal bazlı -->
+        <div class="dash-section-head">
+          <h2 class="dash-section-title">Bugünkü Görevler</h2>
+          <span class="dash-section-link" onclick="navigateTo('sequences');switchSeqTab('tasks')">Tümünü Gör →</span>
         </div>
+        <div id="seq-dash-board"></div>
       </div>
 
       <!-- ─── CALLS ─── -->

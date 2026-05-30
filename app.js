@@ -581,123 +581,123 @@ function navigateTo(page) {
 async function renderDashboard() {
   document.getElementById('greeting-text').textContent = greeting();
 
-  const activities = state.isDemoMode ? DEMO_ACTIVITIES : await fetchActivities();
-  const offers     = state.isDemoMode ? DEMO_OFFERS     : await fetchOffers();
-  const customers  = state.isDemoMode ? DEMO_CUSTOMERS  : await fetchCustomers();
-
-  // State'e cache'le
-  state.customers  = customers;
-  state.offers     = offers;
-  state.activities = activities;
+  // Müşterileri yükle (seans kartı bunu kullanıyor)
+  const customers = state.isDemoMode ? DEMO_CUSTOMERS : await fetchCustomers();
+  state.customers = customers;
 
   // Feature 1: Yeni müşteri bildirimi
   if (!state.isDemoMode) checkNewCustomers(customers);
 
-  const completed = activities.filter(a => a.status === 'completed');
-  // Gerçek modda bugünkü aktiviteler API'den gelir
-  const todayActs = state.isDemoMode
-    ? completed
-    : activities.filter(a => {
-        const d = new Date(a.created_at);
-        const today = new Date();
-        return d.toDateString() === today.toDateString();
-      });
-
-  const calls = todayActs.filter(a => a.result !== undefined).length || completed.filter(a => a.activity_type === 'call').length;
-  const wa    = completed.filter(a => a.activity_type === 'whatsapp').length;
-  const email = completed.filter(a => a.activity_type === 'email').length;
-
-  const dueOffers = offers.filter(o => ['sent','viewed','followup_pending','negotiating'].includes(o.status));
-  const overdue   = activities.filter(a => a.status === 'overdue');
-  const pending   = activities.filter(a => a.status === 'pending');
-  const callList  = customers.filter(c => ['new','to_call','unreachable','call_later'].includes(c.status));
-
-  // Feature 8: Günlük hedef
-  const DAILY_GOAL = state.currentUser?.daily_target || 20;
-  const todayCallCount = state.isDemoMode ? calls : activities.length;
-
-  // KPI values
-  document.getElementById('kpi-calls').textContent  = state.isDemoMode ? calls : todayCallCount;
-  document.getElementById('kpi-wa').textContent     = wa;
-  document.getElementById('kpi-email').textContent  = email;
-  document.getElementById('kpi-offers').textContent = dueOffers.length;
-
-  // Update KPI sub label with target progress
-  const callsCard = document.getElementById('kpi-calls').closest('.kpi-card');
-  const subEl = callsCard.querySelector('.kpi-sub');
-  if (subEl) subEl.textContent = `Hedef: ${DAILY_GOAL}`;
-
-  // KPI bars
-  setBar('kpi-calls',  state.isDemoMode ? calls : todayCallCount, DAILY_GOAL,  '#3B82F6');
-  setBar('kpi-wa',     wa,                10,           '#22C55E');
-  setBar('kpi-email',  email,             10,           '#F97316');
-  setBar('kpi-offers', dueOffers.length,  10,           '#A855F7');
-
-  // Pill counts
-  document.getElementById('d-offers-count').textContent  = dueOffers.length;
-  document.getElementById('d-overdue-count').textContent = overdue.length;
-  document.getElementById('d-pending-count').textContent = pending.length;
-
-  // Feature 3: Takip tarihi geçmiş müşteriler için badge
-  const overdueFollowups = customers.filter(c => {
-    if (!c.follow_up_date) return false;
-    return new Date(c.follow_up_date) <= new Date();
-  });
-  if (overdueFollowups.length > 0) {
-    const badge = document.getElementById('sb-badge-calls');
-    if (badge) { badge.textContent = overdueFollowups.length; badge.style.display = 'flex'; }
-  }
-
-  // Feed lists
-  renderFeed('d-offers-list',  dueOffers, renderOfferFeedItem,   'Takip edilecek teklif yok');
-  renderFeed('d-overdue-list', overdue,   renderActivityFeedItem,'Geciken görev yok');
-  renderFeed('d-pending-list', pending,   renderActivityFeedItem,'Bekleyen takip yok');
-  renderFeed('d-calls-list',   callList.slice(0,5), renderCallFeedItem, 'Aranacak müşteri yok');
-
-  // Sequence görev widget'ı
-  renderSeqDashWidget();
+  // Sequence odaklı dashboard
+  renderSeqDashboard();
 }
 
-// Dashboard'da bugünkü sequence görevleri özeti
-async function renderSeqDashWidget() {
-  const el = document.getElementById('seq-dash-widget');
-  if (!el || state.isDemoMode) { if (el) el.innerHTML = ''; return; }
+// Sequence istatistikleri (KPI) + bugünkü görevler (kanal bazlı)
+async function renderSeqDashboard() {
+  const board = document.getElementById('seq-dash-board');
 
-  const tasks = await fetchSeqTasks();
+  // Demo modda sequence yok
+  if (state.isDemoMode) {
+    ['kpi-seq-today','kpi-seq-overdue','kpi-seq-active','kpi-seq-done'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.textContent = '–';
+    });
+    if (board) board.innerHTML = '<div class="dash-empty">Sequence görevleri canlı modda görünür. Lütfen giriş yapın.</div>';
+    return;
+  }
+
+  // İstatistikler
+  let stats = { today:0, overdue:0, upcoming:0, done_today:0, active_enrollments:0, channels:{} };
+  try { stats = await apiFetch('/api/sequence-tasks?scope=stats'); } catch {}
+  const setKpi = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setKpi('kpi-seq-today',   stats.today);
+  setKpi('kpi-seq-overdue', stats.overdue);
+  setKpi('kpi-seq-active',  stats.active_enrollments);
+  setKpi('kpi-seq-done',    stats.done_today);
+
+  // Sidebar badge (bugün + gecikmiş)
+  const sb = document.getElementById('sb-badge-sequences');
+  if (sb) { const n = (stats.today||0)+(stats.overdue||0); sb.textContent = n>0 ? n : ''; }
+
+  // Bugünkü görevler (bugün + gecikmiş)
+  if (!board) return;
+  let tasks = [];
+  try { tasks = await apiFetch('/api/sequence-tasks'); } catch {}
   state.seqTasks = tasks;
   updateSeqTasksBadge();
 
-  if (!tasks.length) { el.innerHTML = ''; return; }
-
-  const preview = tasks.slice(0, 4).map(t => {
-    const cfg = SEQ_STEP_TYPES[t.step_type] || { icon: '•', label: t.step_type, bg:'#F3F4F6', color:'#6B7280' };
-    return `
-      <div class="seq-task-row" style="margin-bottom:6px">
-        <div class="seq-task-icon" style="background:${cfg.bg};color:${cfg.color}">${cfg.icon}</div>
-        <div class="seq-task-main">
-          <div class="seq-task-company">${escapeHtml(t.company_name)}</div>
-          <div class="seq-task-meta">${cfg.label} · ${escapeHtml(t.sequence_name||'')}</div>
-        </div>
-        <div class="seq-task-actions">
-          <button class="seq-task-btn done" onclick="completeSeqTaskFromDash('${t.id}')">✓</button>
-        </div>
+  if (!tasks.length) {
+    board.innerHTML = `
+      <div class="dash-empty">
+        <div style="font-size:36px;margin-bottom:6px">✅</div>
+        <div style="font-weight:600;color:var(--text-secondary)">Bugün yapılacak görev yok</div>
+        <div style="font-size:13px;margin-top:4px">Tüm takip adımlarını tamamladınız.</div>
       </div>`;
-  }).join('');
+    return;
+  }
 
-  el.innerHTML = `
-    <div class="seq-widget">
-      <div class="seq-widget-head">
-        <div class="seq-widget-title">🔁 Sequence Görevleri <span class="seq-widget-count">${tasks.length}</span></div>
-        <span class="seq-widget-link" onclick="navigateTo('sequences');switchSeqTab('tasks')">Tümünü Gör →</span>
+  // Kanala göre grupla
+  const order = ['call','email','whatsapp','linkedin_connect','linkedin_message'];
+  const groups = {};
+  tasks.forEach(t => { (groups[t.step_type] = groups[t.step_type] || []).push(t); });
+  // LinkedIn'i tek kart altında topla
+  const linkedinTasks = [...(groups.linkedin_connect||[]), ...(groups.linkedin_message||[])];
+
+  const cards = [];
+  const makeCard = (type, list, titleOverride) => {
+    if (!list.length) return;
+    const cfg = SEQ_STEP_TYPES[type] || { icon:'•', label:type, bg:'#F3F4F6', color:'#6B7280' };
+    const title = titleOverride || cfg.label;
+    const rows = list.slice(0, 8).map(t => seqDashRow(t)).join('');
+    const more = list.length > 8 ? `<div class="dash-more">+${list.length-8} daha · <span class="dash-section-link" onclick="navigateTo('sequences');switchSeqTab('tasks')">Görevlerim →</span></div>` : '';
+    cards.push(`
+      <div class="dash-card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <div class="seq-task-icon" style="width:28px;height:28px;font-size:14px;background:${cfg.bg};color:${cfg.color}">${cfg.icon}</div>
+            <h3>${title}</h3>
+          </div>
+          <span class="pill" style="background:${cfg.bg};color:${cfg.color}">${list.length}</span>
+        </div>
+        <div class="feed">${rows}${more}</div>
+      </div>`);
+  };
+
+  makeCard('call',     groups.call || []);
+  makeCard('email',    groups.email || []);
+  makeCard('whatsapp', groups.whatsapp || []);
+  makeCard('linkedin_connect', linkedinTasks, 'LinkedIn');
+
+  board.innerHTML = `<div class="dash-grid">${cards.join('')}</div>`;
+}
+
+// Dashboard görev satırı (kanal kartı içinde)
+function seqDashRow(t) {
+  const contact = t.contact_name ? ` · ${escapeHtml(t.contact_name)}` : '';
+  let link = '';
+  if (t.step_type === 'call' && t.phone)          link = `<a href="tel:${t.phone}" class="dash-row-link" onclick="event.stopPropagation()" title="Ara">📞</a>`;
+  else if (t.step_type === 'email' && t.email)    link = `<a href="mailto:${t.email}?subject=${encodeURIComponent(t.subject||'')}" class="dash-row-link" onclick="event.stopPropagation()" title="Yaz">📧</a>`;
+  else if (t.step_type === 'whatsapp' && t.phone) link = `<a href="https://wa.me/${formatWhatsApp(t.phone)}" target="_blank" class="dash-row-link" onclick="event.stopPropagation()" title="WhatsApp">🟢</a>`;
+  else if (t.step_type.startsWith('linkedin'))    link = `<a href="https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(t.company_name||'')}" target="_blank" class="dash-row-link" onclick="event.stopPropagation()" title="LinkedIn">💼</a>`;
+
+  return `
+    <div class="dash-task-row">
+      <div class="dash-task-info">
+        <div class="dash-task-company">${escapeHtml(t.company_name)}${contact}</div>
+        ${t.subject ? `<div class="dash-task-sub">"${escapeHtml(t.subject)}"</div>` : ''}
       </div>
-      ${preview}
-      ${tasks.length > 4 ? `<div style="text-align:center;font-size:12px;color:var(--text-tertiary);margin-top:8px">+${tasks.length - 4} görev daha</div>` : ''}
+      <div class="dash-task-actions">
+        ${link}
+        <button class="dash-row-done" onclick="completeSeqTaskFromDash('${t.id}')" title="Tamamla">✓</button>
+      </div>
     </div>`;
 }
 
 async function completeSeqTaskFromDash(id) {
-  await completeSeqTask(id, 'done');
-  renderSeqDashWidget();
+  try {
+    await apiFetch(`/api/sequence-tasks?id=${id}`, { method: 'PUT', body: { status: 'done' } });
+    if (typeof showToast === 'function') showToast('Görev tamamlandı');
+    renderSeqDashboard();
+  } catch (e) { alert('Hata: ' + e.message); }
 }
 
 // Feature 1: Yeni müşteri bildirimi

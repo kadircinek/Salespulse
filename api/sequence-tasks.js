@@ -19,6 +19,40 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       const { customer_id, scope } = req.query || {};
 
+      // Dashboard istatistikleri — tek sorguda özet sayılar
+      if (scope === 'stats') {
+        const r = await sql`
+          SELECT
+            COUNT(*) FILTER (WHERE t.status='pending' AND t.due_date = CURRENT_DATE)              AS today,
+            COUNT(*) FILTER (WHERE t.status='pending' AND t.due_date < CURRENT_DATE)              AS overdue,
+            COUNT(*) FILTER (WHERE t.status='pending' AND t.due_date > CURRENT_DATE)              AS upcoming,
+            COUNT(*) FILTER (WHERE t.status='done'    AND t.completed_at::date = CURRENT_DATE)    AS done_today
+          FROM sequence_tasks t
+        `;
+        const e = await sql`
+          SELECT
+            COUNT(*) FILTER (WHERE status='active')    AS active_enrollments,
+            COUNT(*) FILTER (WHERE status='completed') AS completed_enrollments
+          FROM sequence_enrollments
+        `;
+        // Kanal bazlı bugünkü dağılım
+        const byType = await sql`
+          SELECT step_type, COUNT(*)::int AS n
+          FROM sequence_tasks
+          WHERE status='pending' AND due_date <= CURRENT_DATE
+          GROUP BY step_type
+        `;
+        const channels = {};
+        byType.forEach(row => { channels[row.step_type] = row.n; });
+        return res.json({
+          today: +r[0].today, overdue: +r[0].overdue, upcoming: +r[0].upcoming,
+          done_today: +r[0].done_today,
+          active_enrollments: +e[0].active_enrollments,
+          completed_enrollments: +e[0].completed_enrollments,
+          channels,
+        });
+      }
+
       if (customer_id) {
         const rows = await sql`
           SELECT t.*, c.company_name, c.contact_name, c.email, c.phone,

@@ -2364,3 +2364,10 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 .seq-widget-count { background: var(--orange); color: white; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 12px; }
 .seq-widget-link { font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; }
 .seq-widget-empty { text-align: center; padding: 16px; color: var(--text-tertiary); font-size: 13px; }
+
+/* Yaklaşan görevler — soluk, aksiyonsuz */
+.seq-task-row.upcoming { opacity: .62; border-style: dashed; }
+.seq-upcoming-date {
+  font-size: 12px; font-weight: 700; color: var(--text-secondary);
+  margin: 14px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border);
+}

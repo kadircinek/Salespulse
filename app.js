@@ -1052,21 +1052,29 @@ function renderSeqList() {
 }
 
 // ── Görevlerim (bugünkü görevler) ──
-function renderSeqTasks() {
+async function renderSeqTasks() {
   const container = document.getElementById('seq-tasks-container');
-  if (!state.seqTasks.length) {
+  container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-tertiary)">Yükleniyor…</div>';
+
+  // Tüm bekleyen görevleri çek (gelecek dahil)
+  let all = [];
+  try { all = await apiFetch('/api/sequence-tasks?scope=all'); } catch { all = []; }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const day = (t) => (t.due_date || '').slice(0, 10);
+  const overdue  = all.filter(t => day(t) <  today);
+  const todayT   = all.filter(t => day(t) === today);
+  const upcoming = all.filter(t => day(t) >  today);
+
+  if (!all.length) {
     container.innerHTML = `
       <div style="text-align:center;padding:48px;color:var(--text-tertiary)">
         <div style="font-size:40px;margin-bottom:8px">✅</div>
-        <div style="font-weight:600;color:var(--text-secondary)">Bugün için görev yok</div>
+        <div style="font-weight:600;color:var(--text-secondary)">Bekleyen görev yok</div>
         <div style="font-size:13px;margin-top:4px">Tüm takip görevlerini tamamladınız.</div>
       </div>`;
     return;
   }
-
-  const today = new Date().toISOString().slice(0, 10);
-  const overdue = state.seqTasks.filter(t => t.due_date < today);
-  const todayTasks = state.seqTasks.filter(t => t.due_date >= today);
 
   const groupHtml = (title, tasks, isOverdue) => !tasks.length ? '' : `
     <div class="seq-task-group">
@@ -1074,14 +1082,48 @@ function renderSeqTasks() {
       ${tasks.map(t => seqTaskRow(t, isOverdue)).join('')}
     </div>`;
 
+  // Yaklaşan: tarihe göre grupla, ilk 10 günü göster
+  let upcomingHtml = '';
+  if (upcoming.length) {
+    const byDate = {};
+    upcoming.forEach(t => { (byDate[day(t)] = byDate[day(t)] || []).push(t); });
+    const dates = Object.keys(byDate).sort();
+    const shownDates = dates.slice(0, 10);
+    const hiddenCount = upcoming.length - shownDates.reduce((n, d) => n + byDate[d].length, 0);
+
+    upcomingHtml = `
+      <div class="seq-task-group">
+        <div class="seq-task-group-title">📆 Yaklaşan <span style="color:var(--text-tertiary)">(${upcoming.length})</span></div>
+        ${shownDates.map(d => `
+          <div class="seq-upcoming-date">${formatDate(d)} · ${byDate[d].length} görev</div>
+          ${byDate[d].map(t => seqTaskRow(t, false, true)).join('')}
+        `).join('')}
+        ${hiddenCount > 0 ? `<div style="text-align:center;font-size:12px;color:var(--text-tertiary);margin-top:8px">+${hiddenCount} görev daha (ileri tarihli)</div>` : ''}
+      </div>`;
+  }
+
   container.innerHTML =
     groupHtml('⚠️ Gecikmiş', overdue, true) +
-    groupHtml('📅 Bugün ve sonrası', todayTasks, false);
+    groupHtml('📅 Bugün', todayT, false) +
+    upcomingHtml;
 }
 
-function seqTaskRow(t, isOverdue) {
+function seqTaskRow(t, isOverdue, isUpcoming) {
   const cfg = SEQ_STEP_TYPES[t.step_type] || { label: t.step_type, icon: '•', bg: '#F3F4F6', color: '#6B7280' };
   const contact = t.contact_name ? ` · ${escapeHtml(t.contact_name)}` : '';
+
+  // Yaklaşan görevler: soluk, aksiyonsuz (sadece görünürlük için)
+  if (isUpcoming) {
+    return `
+      <div class="seq-task-row upcoming">
+        <div class="seq-task-icon" style="background:${cfg.bg};color:${cfg.color}">${cfg.icon}</div>
+        <div class="seq-task-main">
+          <div class="seq-task-company">${escapeHtml(t.company_name)}${contact}</div>
+          <div class="seq-task-meta">${cfg.label} · ${escapeHtml(t.sequence_name||'')}</div>
+        </div>
+      </div>`;
+  }
+
   // Tip bazlı hızlı aksiyon linki
   let actionLink = '';
   if (t.step_type === 'call' && t.phone)        actionLink = `<a href="tel:${t.phone}" class="seq-task-btn" onclick="event.stopPropagation()">📞 Ara</a>`;
@@ -1109,9 +1151,10 @@ function seqTaskRow(t, isOverdue) {
 async function completeSeqTask(id, status) {
   try {
     await apiFetch(`/api/sequence-tasks?id=${id}`, { method: 'PUT', body: { status } });
+    // Bugün/gecikmiş listesinden ve badge'den düş
     state.seqTasks = state.seqTasks.filter(t => t.id !== id);
     updateSeqTasksBadge();
-    renderSeqTasks();
+    if (state.seqTab === 'tasks') renderSeqTasks();   // yaklaşan dahil yeniden çiz
     if (typeof showToast === 'function') showToast(status === 'done' ? 'Görev tamamlandı' : 'Görev atlandı');
   } catch (e) {
     alert('Hata: ' + e.message);

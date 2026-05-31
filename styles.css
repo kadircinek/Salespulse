@@ -2552,3 +2552,38 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
   border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0;
 }
 .warm-trigger-btn:hover { background: #C2410C; }
+
+/* Dashboard sıcak müşteri hatırlatma kartı */
+.warm-dash-card {
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFFBEB 100%);
+  border: 1.5px solid #FED7AA; border-radius: var(--radius);
+  padding: 16px 18px; margin-bottom: 20px;
+}
+.warm-dash-head { display: flex; justify-content: space-between; align-items: center; }
+.warm-dash-title { font-size: 15px; font-weight: 700; color: #C2410C; display: flex; align-items: center; gap: 8px; }
+.warm-dash-count { background: var(--orange); color: white; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 12px; }
+.warm-dash-link { font-size: 13px; font-weight: 600; color: #C2410C; cursor: pointer; white-space: nowrap; }
+.warm-dash-link:hover { text-decoration: underline; }
+.warm-dash-subtitle { font-size: 12.5px; color: var(--text-secondary); margin: 4px 0 12px; }
+.warm-dash-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: white; border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 6px; cursor: pointer;
+  transition: box-shadow .15s;
+}
+.warm-dash-row:hover { box-shadow: 0 2px 8px rgba(234,88,12,.1); }
+.warm-dash-info { min-width: 0; flex: 1; }
+.warm-dash-company { font-size: 13.5px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.warm-dash-last { font-size: 11.5px; color: var(--text-tertiary); margin-top: 1px; }
+.warm-dash-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.warm-dash-wa {
+  width: 32px; height: 32px; border-radius: 7px; background: #DCFCE7;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 15px; text-decoration: none;
+}
+.warm-dash-wa:hover { background: #25D366; }
+.warm-dash-done {
+  width: 32px; height: 32px; border-radius: 7px; cursor: pointer; font-size: 14px; font-weight: 700;
+  border: 1.5px solid var(--green); color: var(--green); background: white;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.warm-dash-done:hover { background: var(--green); color: white; }
+.warm-dash-more { text-align: center; font-size: 12.5px; color: #C2410C; font-weight: 600; cursor: pointer; padding: 6px 0 2px; }

@@ -616,7 +616,7 @@ async function renderDashboard() {
   renderWarmTrigger();
 }
 
-// Dashboard: 15 gündür temassız sıcak müşteri tetikleyici banner
+// Dashboard: sıcak müşteri hatırlatma kartı (aksiyon alınabilir)
 function renderWarmTrigger() {
   const el = document.getElementById('warm-dash-trigger');
   if (!el) return;
@@ -625,15 +625,36 @@ function renderWarmTrigger() {
   const { due, interval } = computeWarm();
   updateWarmBadge();
   if (!due.length) { el.innerHTML = ''; return; }
-  const top = due.slice(0, 3).map(c => escapeHtml(c.company_name)).join(', ');
+
+  const rows = due.slice(0, 5).map(c => {
+    const ds = daysSince(c.last_contacted);
+    const lastTxt = c.last_contacted ? `${ds} gün önce` : 'Hiç temas yok';
+    const waNum = formatWhatsApp(c.phone);
+    const wa = waNum
+      ? `<a href="${warmWhatsAppLink(c)}" target="_blank" class="warm-dash-wa" onclick="event.stopPropagation()" title="WhatsApp">🟢</a>`
+      : '';
+    return `
+      <div class="warm-dash-row" onclick="showCustomerDrawer('${c.id}')">
+        <div class="warm-dash-info">
+          <div class="warm-dash-company">${escapeHtml(c.company_name)}</div>
+          <div class="warm-dash-last">${lastTxt}</div>
+        </div>
+        <div class="warm-dash-actions" onclick="event.stopPropagation()">
+          ${wa}
+          <button class="warm-dash-done" onclick="warmMarkContacted('${c.id}')" title="Temas kuruldu">✓</button>
+        </div>
+      </div>`;
+  }).join('');
+
   el.innerHTML = `
-    <div class="warm-trigger" onclick="navigateTo('warm')">
-      <div class="warm-trigger-icon">🔥</div>
-      <div class="warm-trigger-text">
-        <div class="warm-trigger-title">${due.length} sıcak müşteri ${interval} gündür temassız</div>
-        <div class="warm-trigger-sub">${top}${due.length > 3 ? ` ve ${due.length - 3} firma daha` : ''} — WhatsApp ile tekrar satış zamanı</div>
+    <div class="warm-dash-card">
+      <div class="warm-dash-head">
+        <div class="warm-dash-title">🔥 Sıcak Müşteri Hatırlatması <span class="warm-dash-count">${due.length}</span></div>
+        <span class="warm-dash-link" onclick="navigateTo('warm')">Tümünü Gör →</span>
       </div>
-      <button class="warm-trigger-btn">Listeyi Aç →</button>
+      <div class="warm-dash-subtitle">${interval} gündür temas edilmeyen müşteriler — WhatsApp ile tekrar satış zamanı</div>
+      ${rows}
+      ${due.length > 5 ? `<div class="warm-dash-more" onclick="navigateTo('warm')">+${due.length - 5} firma daha →</div>` : ''}
     </div>`;
 }
 
@@ -1623,8 +1644,10 @@ async function warmMarkContacted(id) {
     // Yerel cache'te last_contacted güncelle
     const c = state.customers.find(x => x.id === id);
     if (c) c.last_contacted = new Date().toISOString();
-    if (typeof showToast === 'function') showToast('✓ Temas kaydedildi — 15 gün sonra tekrar hatırlatılacak');
-    renderWarm();
+    if (typeof showToast === 'function') showToast(`✓ Temas kaydedildi — ${state.warmInterval} gün sonra tekrar hatırlatılacak`);
+    if (state.currentPage === 'warm') renderWarm();
+    else if (state.currentPage === 'dashboard') renderWarmTrigger();
+    else updateWarmBadge();
   } catch (e) { alert('Hata: ' + e.message); }
 }
 

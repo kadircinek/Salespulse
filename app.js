@@ -361,6 +361,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (warmInt) warmInt.addEventListener('change', () => { state.warmInterval = parseInt(warmInt.value,10)||15; renderWarm(); });
   const warmSave = document.getElementById('warm-template-save');
   if (warmSave) warmSave.addEventListener('click', saveWarmTemplate);
+  const addWarmBtn = document.getElementById('add-warm-customer-btn');
+  if (addWarmBtn) addWarmBtn.addEventListener('click', () => openCustomerModal('add', null, 'sold'));
 
   // Bulk select all
   document.getElementById('bulk-select-all').addEventListener('change', (e) => {
@@ -833,10 +835,12 @@ function renderCallFeedItem(c) {
 async function renderCustomers(search = document.getElementById('customer-search').value) {
   // Demo modda: state.customers zaten set edilmişse (ör. Excel import) onu kullan,
   // aksi hâlde DEMO_CUSTOMERS'dan al
-  const all = state.isDemoMode
+  const fullAll = state.isDemoMode
     ? (state.customers.length ? state.customers : DEMO_CUSTOMERS)
     : await fetchCustomers();
-  state.customers = all; // cache'le
+  state.customers = fullAll; // cache'le (warm sayfası + seans tam listeyi kullanır)
+  // Müşteriler sayfası SADECE cold (satış yapılmamış) — 'sold' müşteriler Sıcak Müşteriler'de
+  const all = fullAll.filter(c => c.status !== 'sold');
   let items = all;
   if (state.customerFilter)       items = items.filter(c => c.status === state.customerFilter);
   if (state.customerSectorFilter) items = items.filter(c => (c.sector||'') === state.customerSectorFilter);
@@ -1468,7 +1472,8 @@ function linkedinBtn(c) {
 /* ──────────────────────────────────────────────
    SICAK MÜŞTERİLER — Tekrar Satış (WhatsApp)
 ────────────────────────────────────────────── */
-const WARM_STATUSES = ['contacted','interested','offer_sent','negotiating','sold'];
+// Sıcak müşteri = satış yaptığımız (sold). Cold müşteride satış olunca 'sold' yapılır → buraya taşınır.
+const WARM_STATUSES = ['sold'];
 const DEFAULT_WARM_TEMPLATE =
   "Merhaba {{ad}}, Buteo Petrokimya'dan ulaşıyorum. {{firma}} için plastik hammadde (ABS, PA6, PC, POM vb.) ihtiyacınız var mı? Türkiye stoğumuzdan hızlı teslimat sağlıyoruz. Bilgi almak ister misiniz?";
 
@@ -1509,7 +1514,7 @@ function daysSince(ts) {
 // Sıcak + uygunluk hesabı
 function computeWarm() {
   const all = state.isDemoMode ? DEMO_CUSTOMERS : state.customers;
-  const warm = all.filter(c => WARM_STATUSES.includes(c.status) && (c.phone || '').trim());
+  const warm = all.filter(c => WARM_STATUSES.includes(c.status));
   const interval = state.warmInterval;
   const due = warm.filter(c => daysSince(c.last_contacted) >= interval);
   // Sıralama: en uzun süredir temassız önce, sonra değer (fit_score)
@@ -1599,7 +1604,7 @@ function warmRow(c, interval, isDue) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.998 0C5.373 0 0 5.373 0 12c0 2.126.554 4.122 1.523 5.858L.054 23.276a.5.5 0 00.611.639l5.565-1.456A11.945 11.945 0 0011.998 24C18.625 24 24 18.627 24 12S18.625 0 11.998 0z"/></svg>
           WhatsApp
         </a>` : ''}
-        <a href="tel:${(c.phone||'').replace(/\s/g,'')}" class="warm-call-btn" title="Ara">📞</a>
+        ${(c.phone||'').trim() ? `<a href="tel:${(c.phone||'').replace(/\s/g,'')}" class="warm-call-btn" title="Ara">📞</a>` : ''}
         <button class="warm-done-btn" onclick="warmMarkContacted('${c.id}')" title="Temas kuruldu olarak işaretle">✓ Temas</button>
       </div>
     </div>`;
@@ -2410,13 +2415,14 @@ async function renderPerformance() {
 let _customerModalMode = 'add';   // 'add' | 'edit'
 let _customerModalId   = null;
 
-function openCustomerModal(mode, customerId) {
+function openCustomerModal(mode, customerId, presetStatus) {
   _customerModalMode = mode;
   _customerModalId   = customerId || null;
 
   // Başlık ve buton metni
   document.getElementById('customer-modal-title').textContent =
-    mode === 'edit' ? '✏️ Müşteriyi Düzenle' : '➕ Yeni Müşteri';
+    mode === 'edit' ? '✏️ Müşteriyi Düzenle'
+    : (presetStatus === 'sold' ? '🔥 Sıcak Müşteri Ekle' : '➕ Yeni Müşteri');
   document.getElementById('customer-modal-submit-text').textContent =
     mode === 'edit' ? 'Güncelle' : 'Kaydet';
 
@@ -2424,7 +2430,7 @@ function openCustomerModal(mode, customerId) {
   const fields = ['cm-company','cm-sector','cm-city','cm-website','cm-fitscore',
                    'cm-contact','cm-title','cm-phone','cm-email','cm-linkedin','cm-notes'];
   fields.forEach(id => { document.getElementById(id).value = ''; });
-  document.getElementById('cm-status').value   = 'new';
+  document.getElementById('cm-status').value   = presetStatus || 'new';
   document.getElementById('cm-assigned').value = '';
   document.getElementById('customer-modal-error').classList.add('hidden');
 
@@ -2522,6 +2528,7 @@ async function submitCustomerModal() {
     closeCustomerModal();
     // Sayfayı yenile
     if (state.currentPage === 'customers') renderCustomers();
+    else if (state.currentPage === 'warm') renderWarm();
     else if (state.currentPage === 'dashboard') renderDashboard();
 
     showToast(

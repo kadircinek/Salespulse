@@ -960,6 +960,30 @@
   </div>
 </div>
 
+<!-- ═══ GÖREV SONUÇ MODALI ═══ -->
+<div id="seq-outcome-backdrop" class="modal-backdrop hidden"></div>
+<div id="seq-outcome-modal" class="modal hidden">
+  <div class="modal-header">
+    <h2 class="modal-title">Görev Sonucu</h2>
+    <button class="modal-close" id="seq-outcome-close">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="modal-body">
+    <div id="seq-outcome-context" class="seq-outcome-context"></div>
+    <label class="cm-label">Ne oldu?</label>
+    <div id="seq-outcome-buttons" class="seq-outcome-btns"></div>
+    <label class="cm-label" style="margin-top:16px">Not (opsiyonel)</label>
+    <textarea id="seq-outcome-note" class="cm-input" rows="2" placeholder="Görüşme notu…"></textarea>
+    <div class="seq-snooze-row">
+      <span class="seq-snooze-label">Şimdi olmadı, ertele:</span>
+      <button class="seq-snooze-btn" data-days="1">Yarın</button>
+      <button class="seq-snooze-btn" data-days="3">+3 gün</button>
+      <button class="seq-snooze-btn" data-days="7">+1 hafta</button>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

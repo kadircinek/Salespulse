@@ -53,9 +53,11 @@ CREATE TABLE IF NOT EXISTS sequence_tasks (
   body             TEXT DEFAULT '',
   due_date         DATE NOT NULL,
   status           TEXT DEFAULT 'pending',  -- pending, done, skipped
+  outcome          TEXT,                    -- reached, no_answer, interested, not_interested, replied
   completed_at     TIMESTAMPTZ,
   created_at       TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE sequence_tasks ADD COLUMN IF NOT EXISTS outcome TEXT;
 CREATE INDEX IF NOT EXISTS idx_seq_tasks_due    ON sequence_tasks(due_date, status);
 CREATE INDEX IF NOT EXISTS idx_seq_tasks_user   ON sequence_tasks(assigned_user_id, status);
 CREATE INDEX IF NOT EXISTS idx_seq_tasks_enroll ON sequence_tasks(enrollment_id);

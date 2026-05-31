@@ -86,6 +86,8 @@ let state = {
   seqTab: 'list',
   seqBuilderSteps: [],
   seqEnrollTargets: [],   // enroll edilecek müşteri id'leri
+  taskById: {},           // görev id → görev objesi (sonuç modalı için)
+  outcomeTaskId: null,
   // Session
   sessionActive: false,
   sessionSeconds: 0,
@@ -343,6 +345,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('seq-enroll-confirm').addEventListener('click', confirmEnroll);
   document.querySelectorAll('.seq-tab').forEach(t =>
     t.addEventListener('click', () => switchSeqTab(t.dataset.seqtab)));
+
+  // Görev sonuç modalı
+  document.getElementById('seq-outcome-close').addEventListener('click', closeOutcomeModal);
+  document.getElementById('seq-outcome-backdrop').addEventListener('click', closeOutcomeModal);
+  document.querySelectorAll('.seq-snooze-btn').forEach(b =>
+    b.addEventListener('click', () => snoozeOutcome(parseInt(b.dataset.days, 10))));
 
   // Bulk select all
   document.getElementById('bulk-select-all').addEventListener('change', (e) => {
@@ -623,6 +631,7 @@ async function renderSeqDashboard() {
   let tasks = [];
   try { tasks = await apiFetch('/api/sequence-tasks'); } catch {}
   state.seqTasks = tasks;
+  tasks.forEach(t => { state.taskById[t.id] = t; });   // sonuç modalı lookup
   updateSeqTasksBadge();
 
   if (!tasks.length) {
@@ -692,12 +701,9 @@ function seqDashRow(t) {
     </div>`;
 }
 
-async function completeSeqTaskFromDash(id) {
-  try {
-    await apiFetch(`/api/sequence-tasks?id=${id}`, { method: 'PUT', body: { status: 'done' } });
-    if (typeof showToast === 'function') showToast('Görev tamamlandı');
-    renderSeqDashboard();
-  } catch (e) { alert('Hata: ' + e.message); }
+// Dashboard'da ✓ → sonuç modalını aç (submitOutcome içinde dashboard tazelenir)
+function completeSeqTaskFromDash(id) {
+  openOutcomeModal(id);
 }
 
 // Feature 1: Yeni müşteri bildirimi
@@ -1064,6 +1070,7 @@ async function renderSeqTasks() {
   // Tüm bekleyen görevleri çek (gelecek dahil)
   let all = [];
   try { all = await apiFetch('/api/sequence-tasks?scope=all'); } catch { all = []; }
+  all.forEach(t => { state.taskById[t.id] = t; });   // sonuç modalı için lookup
 
   const today = new Date().toISOString().slice(0, 10);
   const day = (t) => (t.due_date || '').slice(0, 10);
@@ -1153,17 +1160,99 @@ function seqTaskRow(t, isOverdue, isUpcoming) {
     </div>`;
 }
 
+// "Atla" → doğrudan API; "Yapıldı" → sonuç modalı açılır
 async function completeSeqTask(id, status) {
+  if (status === 'done') { openOutcomeModal(id); return; }
   try {
     await apiFetch(`/api/sequence-tasks?id=${id}`, { method: 'PUT', body: { status } });
-    // Bugün/gecikmiş listesinden ve badge'den düş
     state.seqTasks = state.seqTasks.filter(t => t.id !== id);
+    delete state.taskById[id];
     updateSeqTasksBadge();
-    if (state.seqTab === 'tasks') renderSeqTasks();   // yaklaşan dahil yeniden çiz
-    if (typeof showToast === 'function') showToast(status === 'done' ? 'Görev tamamlandı' : 'Görev atlandı');
+    if (state.seqTab === 'tasks') renderSeqTasks();
+    if (typeof showToast === 'function') showToast('Görev atlandı');
   } catch (e) {
     alert('Hata: ' + e.message);
   }
+}
+
+/* ── Görev Sonuç Modalı ────────────────────────── */
+// Kanal bazlı sonuç seçenekleri
+const OUTCOME_OPTIONS = {
+  call: [
+    { result:'reached',        label:'✅ Ulaşıldı',     cls:'oc-ok' },
+    { result:'no_answer',      label:'📵 Ulaşılamadı',  cls:'oc-neutral' },
+    { result:'interested',     label:'⭐ İlgilendi',    cls:'oc-good' },
+    { result:'not_interested', label:'❌ İlgilenmedi',  cls:'oc-bad' },
+  ],
+  _msg: [   // email / whatsapp / linkedin
+    { result:'reached',        label:'✅ Gönderildi',   cls:'oc-ok' },
+    { result:'replied',        label:'💬 Yanıt Geldi',  cls:'oc-good' },
+    { result:'not_interested', label:'❌ İlgilenmedi',  cls:'oc-bad' },
+  ],
+};
+
+function openOutcomeModal(taskId) {
+  const t = state.taskById[taskId];
+  if (!t) { // güvenlik: bulunamazsa basit tamamla
+    submitOutcome(taskId, null, '');
+    return;
+  }
+  state.outcomeTaskId = taskId;
+  const cfg = SEQ_STEP_TYPES[t.step_type] || { icon:'•', label:t.step_type };
+  document.getElementById('seq-outcome-context').innerHTML =
+    `<div class="oc-ctx-icon">${cfg.icon}</div>
+     <div><div class="oc-ctx-company">${escapeHtml(t.company_name)}</div>
+     <div class="oc-ctx-meta">${cfg.label}${t.contact_name ? ' · '+escapeHtml(t.contact_name) : ''}</div></div>`;
+  const opts = OUTCOME_OPTIONS[t.step_type] || OUTCOME_OPTIONS._msg;
+  document.getElementById('seq-outcome-buttons').innerHTML =
+    opts.map(o => `<button class="oc-btn ${o.cls}" onclick="submitOutcome('${taskId}','${o.result}')">${o.label}</button>`).join('');
+  document.getElementById('seq-outcome-note').value = '';
+  document.getElementById('seq-outcome-backdrop').classList.remove('hidden');
+  document.getElementById('seq-outcome-modal').classList.remove('hidden');
+}
+
+function closeOutcomeModal() {
+  document.getElementById('seq-outcome-backdrop').classList.add('hidden');
+  document.getElementById('seq-outcome-modal').classList.add('hidden');
+  state.outcomeTaskId = null;
+}
+
+async function submitOutcome(taskId, result) {
+  const note = document.getElementById('seq-outcome-note')?.value.trim() || '';
+  try {
+    const res = await apiFetch(`/api/sequence-tasks?id=${taskId}`, {
+      method: 'PUT', body: { status:'done', result, note },
+    });
+    state.seqTasks = state.seqTasks.filter(x => x.id !== taskId);
+    delete state.taskById[taskId];
+    updateSeqTasksBadge();
+    closeOutcomeModal();
+    let msg = 'Görev tamamlandı';
+    if (res.customer_status === 'interested') msg = '⭐ Müşteri "İlgili" — sequence duraklatıldı';
+    else if (res.customer_status === 'lost')  msg = 'Müşteri "İlgilenmedi" — sequence durduruldu';
+    if (typeof showToast === 'function') showToast(msg);
+    // Aktif sayfayı tazele
+    if (state.currentPage === 'sequences' && state.seqTab === 'tasks') renderSeqTasks();
+    else if (state.currentPage === 'dashboard') renderSeqDashboard();
+  } catch (e) { alert('Hata: ' + e.message); }
+}
+
+async function snoozeOutcome(days) {
+  const taskId = state.outcomeTaskId;
+  if (!taskId) return;
+  const note = document.getElementById('seq-outcome-note')?.value.trim() || '';
+  try {
+    await apiFetch(`/api/sequence-tasks?id=${taskId}`, {
+      method:'PUT', body:{ status:'snoozed', snooze_days:days, note },
+    });
+    state.seqTasks = state.seqTasks.filter(x => x.id !== taskId);
+    delete state.taskById[taskId];
+    updateSeqTasksBadge();
+    closeOutcomeModal();
+    if (typeof showToast === 'function') showToast(`Görev ${days===1?'yarına':'+'+days+' güne'} ertelendi`);
+    if (state.currentPage === 'sequences' && state.seqTab === 'tasks') renderSeqTasks();
+    else if (state.currentPage === 'dashboard') renderSeqDashboard();
+  } catch (e) { alert('Hata: ' + e.message); }
 }
 
 // ── Builder (yeni / düzenle) ──
@@ -1374,11 +1463,14 @@ async function showCustomerDrawer(id) {
     custActivities = DEMO_ACTIVITIES.filter(a => a.customer_id === id);
   }
 
-  // Sequence kayıtları
+  // Sequence kayıtları + görevleri (ilerleme hesabı için)
   let custEnrollments = [];
+  let custTasks = [];
   if (!state.isDemoMode && c.id) {
     try { custEnrollments = await apiFetch(`/api/sequence-enrollments?customer_id=${c.id}`); }
     catch { custEnrollments = []; }
+    try { custTasks = await apiFetch(`/api/sequence-tasks?customer_id=${c.id}`); }
+    catch { custTasks = []; }
   }
 
   // Related offers
@@ -1460,16 +1552,39 @@ async function showCustomerDrawer(id) {
       ? custEnrollments.map(e => {
           const stCfg = { active:['Aktif','var(--green)'], completed:['Tamamlandı','var(--accent)'],
                           stopped:['Durduruldu','var(--text-tertiary)'], paused:['Duraklatıldı','var(--orange)'] }[e.status] || [e.status,'var(--text-tertiary)'];
-          return `<div class="drawer-row">
-            <span class="drawer-row-label">${escapeHtml(e.sequence_name)}</span>
-            <span class="drawer-row-value" style="color:${stCfg[1]};font-weight:600;font-size:12px">${stCfg[0]}</span>
-          </div>`;
+          // Bu kayıta ait görevlerden ilerleme hesabı
+          const myTasks = custTasks.filter(t => t.enrollment_id === e.id);
+          const total = myTasks.length;
+          const done  = myTasks.filter(t => t.status === 'done').length;
+          const pending = myTasks.filter(t => t.status === 'pending')
+                                 .sort((a,b) => (a.due_date||'').localeCompare(b.due_date||''));
+          const next = pending[0];
+          const pct = total ? Math.round(done / total * 100) : 0;
+          let nextLine = '';
+          if (next) {
+            const ncfg = SEQ_STEP_TYPES[next.step_type] || { icon:'•', label:next.step_type };
+            nextLine = `<div class="seq-prog-next">Sıradaki: ${ncfg.icon} ${ncfg.label} · ${formatDate(next.due_date)}</div>`;
+          } else if (e.status === 'completed') {
+            nextLine = `<div class="seq-prog-next" style="color:var(--accent)">Tüm adımlar tamamlandı ✓</div>`;
+          }
+          return `
+            <div class="seq-prog-item">
+              <div class="seq-prog-head">
+                <span class="seq-prog-name">${escapeHtml(e.sequence_name)}</span>
+                <span class="seq-prog-badge" style="color:${stCfg[1]}">${stCfg[0]}</span>
+              </div>
+              <div class="seq-prog-bar"><div class="seq-prog-fill" style="width:${pct}%;background:${stCfg[1]}"></div></div>
+              <div class="seq-prog-meta">
+                <span>Adım ${done}/${total}</span>
+                ${nextLine}
+              </div>
+            </div>`;
         }).join('')
       : '<div style="color:var(--text-tertiary);font-size:13px;padding:4px 0">Henüz bir akışa eklenmemiş</div>';
     return `
       <div class="drawer-section">
         <div class="drawer-section-title" style="display:flex;justify-content:space-between;align-items:center">
-          <span>Sequence'ler</span>
+          <span>Sequence İlerlemesi</span>
           ${!active.length ? `<button class="btn-secondary btn-sm" onclick="openEnrollModal('${c.id}')">+ Ekle</button>` : ''}
         </div>
         ${rows}

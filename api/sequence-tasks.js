@@ -95,58 +95,95 @@ module.exports = async (req, res) => {
       return res.json(rows);
     }
 
-    // ── PUT (görev tamamla / atla) ────────────────────────
+    // ── PUT (görev tamamla / ertele / yanıt) ──────────────
     if (req.method === 'PUT') {
       const id = req.query?.id;
       if (!id) return res.status(400).json({ error: 'id gerekli' });
-      const { status, note } = req.body || {};
-      if (!['done', 'skipped'].includes(status))
-        return res.status(400).json({ error: "status 'done' veya 'skipped' olmalı" });
+      const { status, result, note, snooze_days } = req.body || {};
 
       const taskRows = await sql`SELECT * FROM sequence_tasks WHERE id = ${id} LIMIT 1`;
       const task = taskRows[0];
       if (!task) return res.status(404).json({ error: 'Görev bulunamadı' });
 
+      // ── ERTELE (snooze): vade tarihini ileri al, görev pending kalır ──
+      if (status === 'snoozed') {
+        const days = Math.max(1, parseInt(snooze_days, 10) || 1);
+        await sql`
+          UPDATE sequence_tasks
+          SET due_date = CURRENT_DATE + ${days} * INTERVAL '1 day'
+          WHERE id = ${id}
+        `;
+        if (note) {
+          try {
+            await sql`INSERT INTO activities (customer_id, result, note, created_by)
+                      VALUES (${task.customer_id}, 'takip_gerekiyor', ${note}, ${user.id})`;
+          } catch (e) {}
+        }
+        return res.json({ ok: true, snoozed: true, days });
+      }
+
+      if (!['done', 'skipped'].includes(status))
+        return res.status(400).json({ error: "status 'done', 'skipped' veya 'snoozed' olmalı" });
+
       // Görevi işaretle
       await sql`
-        UPDATE sequence_tasks SET status = ${status}, completed_at = NOW()
+        UPDATE sequence_tasks SET status = ${status}, completed_at = NOW(), outcome = ${result || null}
         WHERE id = ${id}
       `;
 
+      let custStatusChanged = null;
+      let enrollmentPaused  = false;
+
       if (status === 'done') {
-        // Aktivite kaydı düş (zaman çizelgesinde görünsün)
-        const resultMap = {
-          call: 'görüşüldü', email: 'mail_atıldı', whatsapp: 'mail_atıldı',
-          linkedin_connect: 'görüşüldü', linkedin_message: 'görüşüldü',
+        // Sonuç → aktivite result eşlemesi
+        const ACT_RESULT = {
+          reached:        'görüşüldü',
+          no_answer:      'ulaşılamadı',
+          interested:     'görüşüldü',
+          not_interested: 'görüşüldü',
+          replied:        'görüşüldü',
         };
-        const result = resultMap[task.step_type] || 'görüşüldü';
-        const noteText = note || `Sequence görevi: ${stepLabel(task.step_type)}`;
+        const baseMap = { call:'görüşüldü', email:'mail_atıldı', whatsapp:'mail_atıldı',
+                          linkedin_connect:'görüşüldü', linkedin_message:'görüşüldü' };
+        const actResult = ACT_RESULT[result] || baseMap[task.step_type] || 'görüşüldü';
+        const resultLabel = {
+          reached:'Ulaşıldı', no_answer:'Ulaşılamadı', interested:'İlgilendi',
+          not_interested:'İlgilenmedi', replied:'Yanıt geldi',
+        }[result] || '';
+        const noteText = note || (resultLabel ? `${stepLabel(task.step_type)} — ${resultLabel}` : `Sequence görevi: ${stepLabel(task.step_type)}`);
         try {
-          await sql`
-            INSERT INTO activities (customer_id, result, note, created_by)
-            VALUES (${task.customer_id}, ${result}, ${noteText}, ${user.id})
-          `;
-          await sql`
-            UPDATE customers SET last_contacted = NOW(), updated_at = NOW()
-            WHERE id = ${task.customer_id}
-          `;
-        } catch (e) { /* activities tablosu yoksa sessiz geç */ }
+          await sql`INSERT INTO activities (customer_id, result, note, created_by)
+                    VALUES (${task.customer_id}, ${actResult}, ${noteText}, ${user.id})`;
+          await sql`UPDATE customers SET last_contacted = NOW(), updated_at = NOW() WHERE id = ${task.customer_id}`;
+        } catch (e) {}
+
+        // Sonuç yan etkileri
+        if (result === 'interested' || result === 'replied') {
+          // İlgili/yanıt → sequence'i duraklat, müşteriyi 'interested' yap, bekleyen görevleri iptal
+          await sql`UPDATE customers SET status='interested', updated_at=NOW() WHERE id=${task.customer_id} AND status NOT IN ('sold','lost')`;
+          await sql`UPDATE sequence_enrollments SET status='paused', stop_reason=${result} WHERE id=${task.enrollment_id} AND status='active'`;
+          await sql`UPDATE sequence_tasks SET status='skipped' WHERE enrollment_id=${task.enrollment_id} AND status='pending'`;
+          custStatusChanged = 'interested'; enrollmentPaused = true;
+        } else if (result === 'not_interested') {
+          // İlgilenmedi → müşteriyi 'lost', sequence'i durdur
+          await sql`UPDATE customers SET status='lost', updated_at=NOW() WHERE id=${task.customer_id}`;
+          await sql`UPDATE sequence_enrollments SET status='stopped', stop_reason='lost', completed_at=NOW() WHERE id=${task.enrollment_id} AND status='active'`;
+          await sql`UPDATE sequence_tasks SET status='skipped' WHERE enrollment_id=${task.enrollment_id} AND status='pending'`;
+          custStatusChanged = 'lost'; enrollmentPaused = true;
+        }
       }
 
-      // Kayıtta başka bekleyen görev kaldı mı? Kalmadıysa tamamlandı işaretle
+      // Bekleyen görev kalmadıysa kaydı tamamlandı yap
       const remaining = await sql`
         SELECT COUNT(*)::int AS n FROM sequence_tasks
         WHERE enrollment_id = ${task.enrollment_id} AND status = 'pending'
       `;
-      if (remaining[0].n === 0) {
-        await sql`
-          UPDATE sequence_enrollments
-          SET status = 'completed', completed_at = NOW()
-          WHERE id = ${task.enrollment_id} AND status = 'active'
-        `;
+      if (remaining[0].n === 0 && !enrollmentPaused) {
+        await sql`UPDATE sequence_enrollments SET status='completed', completed_at=NOW()
+                  WHERE id=${task.enrollment_id} AND status='active'`;
       }
 
-      return res.json({ ok: true, enrollment_completed: remaining[0].n === 0 });
+      return res.json({ ok: true, enrollment_completed: remaining[0].n === 0, customer_status: custStatusChanged, enrollment_paused: enrollmentPaused });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });

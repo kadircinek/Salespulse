@@ -2483,3 +2483,72 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 .seq-prog-fill { height: 100%; border-radius: 3px; transition: width .3s; }
 .seq-prog-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; font-size: 11.5px; color: var(--text-tertiary); gap: 8px; }
 .seq-prog-next { font-size: 11.5px; color: var(--text-secondary); font-weight: 500; text-align: right; }
+
+/* ═══ SICAK MÜŞTERİLER (Tekrar Satış) ═══ */
+.warm-interval-wrap { display: flex; align-items: center; gap: 8px; }
+.warm-interval-label { font-size: 12.5px; color: var(--text-secondary); font-weight: 600; }
+
+/* Şablon kartı */
+.warm-template-card {
+  background: white; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px; margin-bottom: 20px;
+}
+.warm-template-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 6px; }
+.warm-template-title { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.warm-template-hint { font-size: 12px; color: var(--text-tertiary); }
+.warm-template-hint code { background: var(--bg); padding: 1px 6px; border-radius: 4px; color: var(--accent); font-size: 11.5px; }
+.warm-template-input {
+  width: 100%; box-sizing: border-box; padding: 10px 12px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 13.5px; font-family: inherit; resize: vertical; line-height: 1.5;
+}
+.warm-template-input:focus { border-color: var(--accent); outline: none; }
+.warm-template-actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.warm-template-saved { font-size: 12.5px; color: var(--green); font-weight: 600; }
+
+/* Bölümler & satırlar */
+.warm-section { margin-bottom: 24px; }
+.warm-section-title { font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.warm-count { background: var(--bg); color: var(--text-secondary); font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 12px; }
+.warm-list { display: flex; flex-direction: column; gap: 8px; }
+.warm-row {
+  display: flex; align-items: center; gap: 14px;
+  background: white; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 12px 16px; cursor: pointer; transition: box-shadow .15s, border-color .15s;
+}
+.warm-row:hover { box-shadow: 0 3px 10px rgba(0,0,0,.06); border-color: var(--accent-light); }
+.warm-row-main { flex: 1; min-width: 0; }
+.warm-row-company { font-size: 14.5px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.warm-row-meta { display: flex; align-items: center; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+.warm-last { font-size: 12px; color: var(--text-tertiary); }
+.warm-next { font-size: 11.5px; color: var(--text-tertiary); background: var(--bg); padding: 2px 8px; border-radius: 10px; }
+.warm-row-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.warm-wa-btn { text-decoration: none; }
+.warm-call-btn {
+  width: 36px; height: 36px; border-radius: 8px; background: var(--bg);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 16px; text-decoration: none;
+}
+.warm-call-btn:hover { background: var(--border); }
+.warm-done-btn {
+  padding: 8px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  border: 1.5px solid var(--green); color: var(--green); background: white; white-space: nowrap;
+}
+.warm-done-btn:hover { background: var(--green); color: white; }
+
+/* Dashboard tetikleyici banner */
+.warm-trigger {
+  display: flex; align-items: center; gap: 14px;
+  background: linear-gradient(135deg, #FFF7ED 0%, #FFFBEB 100%);
+  border: 1.5px solid #FED7AA; border-radius: var(--radius);
+  padding: 14px 18px; margin-bottom: 20px; cursor: pointer; transition: box-shadow .15s;
+}
+.warm-trigger:hover { box-shadow: 0 4px 14px rgba(234,88,12,.12); }
+.warm-trigger-icon { font-size: 28px; flex-shrink: 0; }
+.warm-trigger-text { flex: 1; min-width: 0; }
+.warm-trigger-title { font-size: 14.5px; font-weight: 700; color: #C2410C; }
+.warm-trigger-sub { font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; }
+.warm-trigger-btn {
+  background: var(--orange); color: white; border: none; padding: 9px 16px;
+  border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+}
+.warm-trigger-btn:hover { background: #C2410C; }

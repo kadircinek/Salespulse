@@ -104,6 +104,11 @@
         <span>Müşteriler</span>
         <div class="sb-badge" id="sb-badge-customers"></div>
       </a>
+      <a class="sb-item" data-page="warm" href="#">
+        <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"/></svg>
+        <span>Sıcak Müşteriler</span>
+        <div class="sb-badge" id="sb-badge-warm"></div>
+      </a>
       <a class="sb-item" data-page="offers" href="#">
         <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
         <span>Teklifler</span>
@@ -273,6 +278,9 @@
             </div>
           </div>
         </div>
+
+        <!-- Sıcak müşteri tetikleyici banner -->
+        <div id="warm-dash-trigger"></div>
 
         <!-- Sequence KPI satırı -->
         <div class="kpi-row">
@@ -539,6 +547,39 @@
         <div id="seq-tab-tasks" class="seq-tab-panel hidden">
           <div id="seq-tasks-container"></div>
         </div>
+      </div>
+
+      <!-- ─── SICAK MÜŞTERİLER (Tekrar Satış) ─── -->
+      <div id="page-warm" class="page hidden">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title">Sıcak Müşteriler</h1>
+            <p class="page-desc">Satış yaptığımız firmalara periyodik WhatsApp ile tekrar satış</p>
+          </div>
+          <div class="warm-interval-wrap">
+            <span class="warm-interval-label">Hatırlatma periyodu:</span>
+            <select id="warm-interval" class="adv-filter-select">
+              <option value="15" selected>15 gün</option>
+              <option value="30">30 gün</option>
+              <option value="60">60 gün</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- WhatsApp mesaj şablonu -->
+        <div class="warm-template-card">
+          <div class="warm-template-head">
+            <span class="warm-template-title">📱 WhatsApp Mesaj Şablonu</span>
+            <span class="warm-template-hint">Kişiselleştirme: <code>{{firma}}</code> · <code>{{ad}}</code></span>
+          </div>
+          <textarea id="warm-template" class="warm-template-input" rows="3"></textarea>
+          <div class="warm-template-actions">
+            <button class="btn-secondary btn-sm" id="warm-template-save">Şablonu Kaydet</button>
+            <span id="warm-template-saved" class="warm-template-saved hidden">✓ Kaydedildi</span>
+          </div>
+        </div>
+
+        <div id="warm-container"></div>
       </div>
 
     </div><!-- /pages-wrap -->

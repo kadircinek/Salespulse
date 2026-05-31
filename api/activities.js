@@ -48,6 +48,16 @@ module.exports = async (req, res) => {
         RETURNING *
       `;
 
+      // Tekrar satış teması: yalnızca son temas tarihini sıfırla, STATÜYÜ KORU
+      // (sıcak/satış müşterisini "Görüşüldü"ye düşürmemek için ayrı sonuç)
+      if (result === 'tekrar_temas') {
+        await sql`
+          UPDATE customers SET last_contacted = NOW(), updated_at = NOW()
+          WHERE id = ${customer_id}
+        `;
+        return res.status(201).json(rows[0]);
+      }
+
       // Müşteri durumunu ve son görüşme tarihini güncelle
       const newStatus = RESULT_TO_STATUS[result];
       if (newStatus) {

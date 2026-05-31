@@ -88,6 +88,9 @@ let state = {
   seqEnrollTargets: [],   // enroll edilecek müşteri id'leri
   taskById: {},           // görev id → görev objesi (sonuç modalı için)
   outcomeTaskId: null,
+  // Sıcak müşteriler (tekrar satış)
+  warmInterval: 15,
+  warmTemplate: '',
   // Session
   sessionActive: false,
   sessionSeconds: 0,
@@ -242,6 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (state.currentPage === 'offers') renderOffers();
     else if (state.currentPage === 'calls') renderCalls();
     else if (state.currentPage === 'sequences') renderSequences();
+    else if (state.currentPage === 'warm') renderWarm();
   });
 
   // Mobile menu toggle
@@ -351,6 +355,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('seq-outcome-backdrop').addEventListener('click', closeOutcomeModal);
   document.querySelectorAll('.seq-snooze-btn').forEach(b =>
     b.addEventListener('click', () => snoozeOutcome(parseInt(b.dataset.days, 10))));
+
+  // Sıcak müşteriler
+  const warmInt = document.getElementById('warm-interval');
+  if (warmInt) warmInt.addEventListener('change', () => { state.warmInterval = parseInt(warmInt.value,10)||15; renderWarm(); });
+  const warmSave = document.getElementById('warm-template-save');
+  if (warmSave) warmSave.addEventListener('click', saveWarmTemplate);
 
   // Bulk select all
   document.getElementById('bulk-select-all').addEventListener('change', (e) => {
@@ -558,6 +568,7 @@ const PAGE_TITLES = {
   offers:      'Teklifler',
   performance: 'Performans',
   sequences:   "Sequence'ler",
+  warm:        'Sıcak Müşteriler',
 };
 
 function navigateTo(page) {
@@ -581,6 +592,7 @@ function navigateTo(page) {
   else if (page === 'calls')       renderCalls();
   else if (page === 'performance') renderPerformance();
   else if (page === 'sequences')   renderSequences();
+  else if (page === 'warm')        renderWarm();
 }
 
 /* ──────────────────────────────────────────────
@@ -598,6 +610,29 @@ async function renderDashboard() {
 
   // Sequence odaklı dashboard
   renderSeqDashboard();
+  // Sıcak müşteri tetikleme banner'ı + sidebar rozeti
+  renderWarmTrigger();
+}
+
+// Dashboard: 15 gündür temassız sıcak müşteri tetikleyici banner
+function renderWarmTrigger() {
+  const el = document.getElementById('warm-dash-trigger');
+  if (!el) return;
+  if (state.isDemoMode) { el.innerHTML = ''; return; }
+  if (!state.warmTemplate) loadWarmTemplate();
+  const { due, interval } = computeWarm();
+  updateWarmBadge();
+  if (!due.length) { el.innerHTML = ''; return; }
+  const top = due.slice(0, 3).map(c => escapeHtml(c.company_name)).join(', ');
+  el.innerHTML = `
+    <div class="warm-trigger" onclick="navigateTo('warm')">
+      <div class="warm-trigger-icon">🔥</div>
+      <div class="warm-trigger-text">
+        <div class="warm-trigger-title">${due.length} sıcak müşteri ${interval} gündür temassız</div>
+        <div class="warm-trigger-sub">${top}${due.length > 3 ? ` ve ${due.length - 3} firma daha` : ''} — WhatsApp ile tekrar satış zamanı</div>
+      </div>
+      <button class="warm-trigger-btn">Listeyi Aç →</button>
+    </div>`;
 }
 
 // Sequence istatistikleri (KPI) + bugünkü görevler (kanal bazlı)
@@ -1428,6 +1463,164 @@ function linkedinBtn(c) {
     </a>`;
   }
   return '';  // profil yoksa drawer butonu gösterme (Bilgiler bölümünde arama linki var)
+}
+
+/* ──────────────────────────────────────────────
+   SICAK MÜŞTERİLER — Tekrar Satış (WhatsApp)
+────────────────────────────────────────────── */
+const WARM_STATUSES = ['contacted','interested','offer_sent','negotiating','sold'];
+const DEFAULT_WARM_TEMPLATE =
+  "Merhaba {{ad}}, Buteo Petrokimya'dan ulaşıyorum. {{firma}} için plastik hammadde (ABS, PA6, PC, POM vb.) ihtiyacınız var mı? Türkiye stoğumuzdan hızlı teslimat sağlıyoruz. Bilgi almak ister misiniz?";
+
+function loadWarmTemplate() {
+  state.warmTemplate = localStorage.getItem('sp_warm_template') || DEFAULT_WARM_TEMPLATE;
+  return state.warmTemplate;
+}
+function saveWarmTemplate() {
+  const t = document.getElementById('warm-template').value.trim() || DEFAULT_WARM_TEMPLATE;
+  state.warmTemplate = t;
+  localStorage.setItem('sp_warm_template', t);
+  const ok = document.getElementById('warm-template-saved');
+  ok.classList.remove('hidden');
+  setTimeout(() => ok.classList.add('hidden'), 1800);
+  renderWarm(); // önizlemeleri tazele
+}
+
+// {{firma}} / {{ad}} doldur
+function fillTemplate(tpl, c) {
+  const firstName = (c.contact_name || '').trim().split(/\s+/)[0] || 'Merhaba';
+  return (tpl || '')
+    .replace(/\{\{\s*firma\s*\}\}/gi, c.company_name || '')
+    .replace(/\{\{\s*ad\s*\}\}/gi, firstName);
+}
+function warmWhatsAppLink(c) {
+  const num = formatWhatsApp(c.phone);
+  const msg = fillTemplate(state.warmTemplate, c);
+  return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
+}
+
+// Gün farkı (last_contacted → bugün); null ise çok büyük (hiç temas yok)
+function daysSince(ts) {
+  if (!ts) return Infinity;
+  const d = (Date.now() - new Date(ts).getTime()) / 86400000;
+  return Math.floor(d);
+}
+
+// Sıcak + uygunluk hesabı
+function computeWarm() {
+  const all = state.isDemoMode ? DEMO_CUSTOMERS : state.customers;
+  const warm = all.filter(c => WARM_STATUSES.includes(c.status) && (c.phone || '').trim());
+  const interval = state.warmInterval;
+  const due = warm.filter(c => daysSince(c.last_contacted) >= interval);
+  // Sıralama: en uzun süredir temassız önce, sonra değer (fit_score)
+  const byOverdue = (a, b) => {
+    const da = daysSince(a.last_contacted), db = daysSince(b.last_contacted);
+    if (da !== db) return db - da;
+    return (b.fit_score || 0) - (a.fit_score || 0);
+  };
+  due.sort(byOverdue);
+  warm.sort(byOverdue);
+  return { warm, due, interval };
+}
+
+function updateWarmBadge() {
+  if (state.isDemoMode) return;
+  const { due } = computeWarm();
+  const b = document.getElementById('sb-badge-warm');
+  if (b) b.textContent = due.length > 0 ? due.length : '';
+}
+
+async function renderWarm() {
+  const container = document.getElementById('warm-container');
+  // Şablon & interval init
+  if (!state.warmTemplate) loadWarmTemplate();
+  const tplEl = document.getElementById('warm-template');
+  if (tplEl && !tplEl.value) tplEl.value = state.warmTemplate;
+  const intEl = document.getElementById('warm-interval');
+  if (intEl) state.warmInterval = parseInt(intEl.value, 10) || 15;
+
+  if (state.isDemoMode) {
+    container.innerHTML = '<div class="dash-empty">Sıcak müşteriler canlı modda görünür. Lütfen giriş yapın.</div>';
+    return;
+  }
+  // Müşteriler yüklü değilse çek
+  if (!state.customers.length) {
+    try { state.customers = await fetchCustomers(); } catch {}
+  }
+
+  const { warm, due, interval } = computeWarm();
+  updateWarmBadge();
+
+  if (!warm.length) {
+    container.innerHTML = `<div class="dash-empty">
+      <div style="font-size:36px;margin-bottom:6px">🔥</div>
+      <div style="font-weight:600;color:var(--text-secondary)">Henüz sıcak müşteri yok</div>
+      <div style="font-size:13px;margin-top:4px">Satış yaptığınız (telefonu olan) firmalar burada görünür.</div>
+    </div>`;
+    return;
+  }
+
+  const notDue = warm.filter(c => daysSince(c.last_contacted) < interval);
+
+  container.innerHTML =
+    warmSection(`🟢 Şimdi Temas Edilecek`, due, interval, true) +
+    (notDue.length ? warmSection(`⏳ Yakın Zamanda Temas Edildi`, notDue, interval, false) : '');
+}
+
+function warmSection(title, list, interval, isDue) {
+  if (!list.length) {
+    return `<div class="warm-section"><div class="warm-section-title">${title} <span class="warm-count">0</span></div>
+      <div class="dash-empty" style="padding:24px">Bu listede firma yok.</div></div>`;
+  }
+  const rows = list.map(c => warmRow(c, interval, isDue)).join('');
+  return `
+    <div class="warm-section">
+      <div class="warm-section-title">${title} <span class="warm-count">${list.length}</span></div>
+      <div class="warm-list">${rows}</div>
+    </div>`;
+}
+
+function warmRow(c, interval, isDue) {
+  const cfg = STATUS_CONFIG[c.status] || STATUS_CONFIG.new;
+  const initials = (c.company_name || '?').substring(0, 2).toUpperCase();
+  const ds = daysSince(c.last_contacted);
+  const lastTxt = c.last_contacted ? `${ds} gün önce` : 'Hiç temas yok';
+  const nextTxt = isDue ? '' : `<span class="warm-next">${interval - ds} gün sonra</span>`;
+  const waNum = formatWhatsApp(c.phone);
+  return `
+    <div class="warm-row" onclick="showCustomerDrawer('${c.id}')">
+      <div class="company-initials" style="background:${cfg.bg};color:${cfg.color}">${initials}</div>
+      <div class="warm-row-main">
+        <div class="warm-row-company">${escapeHtml(c.company_name)}</div>
+        <div class="warm-row-meta">${statusPill(c.status, STATUS_CONFIG)} <span class="warm-last">${lastTxt}</span> ${nextTxt}</div>
+      </div>
+      <div class="warm-row-actions" onclick="event.stopPropagation()">
+        ${waNum ? `<a href="${warmWhatsAppLink(c)}" target="_blank" class="btn-wa warm-wa-btn" onclick="warmAfterSend('${c.id}')" title="WhatsApp mesajı gönder">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.998 0C5.373 0 0 5.373 0 12c0 2.126.554 4.122 1.523 5.858L.054 23.276a.5.5 0 00.611.639l5.565-1.456A11.945 11.945 0 0011.998 24C18.625 24 24 18.627 24 12S18.625 0 11.998 0z"/></svg>
+          WhatsApp
+        </a>` : ''}
+        <a href="tel:${(c.phone||'').replace(/\s/g,'')}" class="warm-call-btn" title="Ara">📞</a>
+        <button class="warm-done-btn" onclick="warmMarkContacted('${c.id}')" title="Temas kuruldu olarak işaretle">✓ Temas</button>
+      </div>
+    </div>`;
+}
+
+// WhatsApp linkine tıklandığında: kullanıcı mesajı göndermeye gitti, otomatik işaretleme yapma —
+// satışçı dönüp "✓ Temas" ile onaylar. (İstenirse otomatik de yapılabilir.)
+function warmAfterSend(id) { /* şimdilik no-op; manuel onay tercih edildi */ }
+
+async function warmMarkContacted(id) {
+  try {
+    await apiFetch('/api/activities', {
+      method: 'POST',
+      body: { customer_id: id, result: 'tekrar_temas', note: 'WhatsApp tekrar satış teması' },
+    });
+    // Yerel cache'te last_contacted güncelle
+    const c = state.customers.find(x => x.id === id);
+    if (c) c.last_contacted = new Date().toISOString();
+    if (typeof showToast === 'function') showToast('✓ Temas kaydedildi — 15 gün sonra tekrar hatırlatılacak');
+    renderWarm();
+  } catch (e) { alert('Hata: ' + e.message); }
 }
 
 /* ──────────────────────────────────────────────

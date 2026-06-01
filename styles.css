@@ -2587,3 +2587,37 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 }
 .warm-dash-done:hover { background: var(--green); color: white; }
 .warm-dash-more { text-align: center; font-size: 12.5px; color: #C2410C; font-weight: 600; cursor: pointer; padding: 6px 0 2px; }
+
+/* ═══ GÜNLÜK HEDEF KARTI ═══ */
+.hedef-card {
+  display: flex; align-items: center; gap: 28px;
+  background: linear-gradient(135deg, #1B3A6B 0%, #2563EB 100%);
+  border-radius: var(--radius); padding: 22px 26px; margin-bottom: 20px; color: white;
+  transition: background .4s;
+}
+.hedef-card.hedef-done-state { background: linear-gradient(135deg, #15803D 0%, #16A34A 100%); }
+.hedef-ring-wrap { position: relative; width: 120px; height: 120px; flex-shrink: 0; }
+.hedef-ring { transform: rotate(-90deg); display: block; }
+.hedef-ring-bg { fill: none; stroke: rgba(255,255,255,.18); stroke-width: 10; }
+.hedef-ring-fill { fill: none; stroke: #fff; stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset .7s ease; }
+.hedef-ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.hedef-ring-done { font-size: 38px; font-weight: 800; line-height: 1; }
+.hedef-ring-target { font-size: 14px; opacity: .8; margin-top: 2px; }
+.hedef-info { flex: 1; min-width: 0; }
+.hedef-label { font-size: 11.5px; font-weight: 700; letter-spacing: .6px; opacity: .85; }
+.hedef-title { font-size: 22px; font-weight: 800; margin: 4px 0 3px; }
+.hedef-sub { font-size: 14px; opacity: .92; }
+.hedef-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+.hedef-edit-btn, .hedef-call-btn {
+  padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.hedef-edit-btn { background: rgba(255,255,255,.16); color: white; }
+.hedef-edit-btn:hover { background: rgba(255,255,255,.28); }
+.hedef-call-btn { background: white; color: #2563EB; }
+.hedef-call-btn:hover { background: #EFF6FF; }
+.hedef-done-state .hedef-call-btn { color: #16A34A; }
+@media (max-width: 560px) {
+  .hedef-card { flex-direction: column; text-align: center; gap: 16px; }
+  .hedef-actions { justify-content: center; }
+}

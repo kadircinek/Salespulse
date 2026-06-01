@@ -299,36 +299,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('drawer-close').addEventListener('click', closeDrawer);
   document.getElementById('drawer-backdrop').addEventListener('click', closeDrawer);
 
-  // Session card
-  document.getElementById('session-start-btn').addEventListener('click', toggleSession);
-  document.getElementById('session-skip-btn').addEventListener('click', sessionSkip);
-  document.getElementById('session-save-btn').addEventListener('click', sessionSaveAndNext);
-
-  // Sonuç butonları (result-btn)
-  document.getElementById('session-result-btns').addEventListener('click', (e) => {
-    const btn = e.target.closest('.result-btn');
-    if (!btn) return;
-    document.querySelectorAll('.result-btn').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-    state.sessionResult = btn.dataset.result;
-    document.getElementById('session-save-btn').disabled = false;
-
-    // Feature 2: Takip tarihi picker'ı göster/gizle
-    const picker = document.getElementById('followup-picker');
-    if (state.sessionResult === 'takip_gerekiyor') {
-      picker.classList.remove('hidden');
-      // Default: 3 gün seç
-      state.sessionFollowUpDate = addDays(3);
-      document.getElementById('followup-custom-date').value = state.sessionFollowUpDate;
-      document.querySelectorAll('.fu-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.days === '3');
-      });
-    } else {
-      picker.classList.add('hidden');
-      state.sessionFollowUpDate = null;
-    }
-  });
-
   // Bulk message modal
   document.getElementById('bulk-msg-btn').addEventListener('click', openBulkModal);
   document.getElementById('bulk-modal-close').addEventListener('click', closeBulkModal);
@@ -363,6 +333,14 @@ document.addEventListener('DOMContentLoaded', () => {
   if (warmSave) warmSave.addEventListener('click', saveWarmTemplate);
   const addWarmBtn = document.getElementById('add-warm-customer-btn');
   if (addWarmBtn) addWarmBtn.addEventListener('click', () => openCustomerModal('add', null, 'sold'));
+
+  // Günlük hedef kartı
+  const hedefEdit = document.getElementById('hedef-edit-btn');
+  if (hedefEdit) hedefEdit.addEventListener('click', editHedef);
+  const hedefCall = document.getElementById('hedef-call-btn');
+  if (hedefCall) hedefCall.addEventListener('click', () => navigateTo('calls'));
+  const hedefNotif = document.getElementById('hedef-notif-btn');
+  if (hedefNotif) hedefNotif.addEventListener('click', requestReminderPermission);
 
   // Bulk select all
   document.getElementById('bulk-select-all').addEventListener('change', (e) => {
@@ -558,6 +536,8 @@ function enterApp() {
   }
 
   navigateTo('dashboard');
+  // Hatırlatıcı bildirimleri başlat (08:30-17:00)
+  initReminders();
 }
 
 /* ──────────────────────────────────────────────
@@ -610,10 +590,143 @@ async function renderDashboard() {
   // Feature 1: Yeni müşteri bildirimi
   if (!state.isDemoMode) checkNewCustomers(customers);
 
+  // Günlük hedef kartı
+  renderHedef();
   // Sequence odaklı dashboard
   renderSeqDashboard();
   // Sıcak müşteri tetikleme banner'ı + sidebar rozeti
   renderWarmTrigger();
+}
+
+/* ──────────────────────────────────────────────
+   GÜNLÜK HEDEF KARTI + MOTİVASYON
+────────────────────────────────────────────── */
+const HEDEF_RING_CIRC = 314.16; // 2π·50
+
+function getHedefTarget() {
+  const saved = parseInt(localStorage.getItem('sp_daily_target') || '', 10);
+  if (saved && saved > 0) return saved;
+  return state.currentUser?.daily_target || 20;
+}
+
+// Motivasyon mesajı (ilerlemeye göre)
+function hedefMessage(done, target, pct) {
+  if (done === 0)        return ['Hadi başlayalım! 💪', 'İlk aramanı yap, ivme kazan.'];
+  if (pct >= 100)        return ['Hedefi tamamladın! 🎉', 'Müthişsin! Bonus her arama ekstra puan.'];
+  if (pct >= 75)         return ['Son düzlüktesin! 🔥', `Hedefe ${target - done} işlem kaldı, bitir şunu!`];
+  if (pct >= 50)         return ['Yarıyı geçtin! 🚀', `Harika gidiyorsun, ${target - done} işlem kaldı.`];
+  if (pct >= 25)         return ['İyi gidiyorsun! 👏', `Devam et, ${target - done} işlem kaldı.`];
+  return ['Güzel başlangıç! ✨', `${target - done} işlem daha hedefe ulaşmak için.`];
+}
+
+async function renderHedef() {
+  const card = document.getElementById('hedef-card');
+  if (!card) return;
+
+  let done = 0;
+  const target = getHedefTarget();
+  if (!state.isDemoMode) {
+    try {
+      const stats = await apiFetch('/api/stats');
+      done = stats?.today?.total || 0;
+    } catch { done = 0; }
+  }
+  state.hedefDone = done;
+  state.hedefTarget = target;
+
+  const pct = target > 0 ? Math.min(100, Math.round(done / target * 100)) : 0;
+  const [title, sub] = hedefMessage(done, target, pct);
+
+  document.getElementById('hedef-done').textContent = done;
+  document.getElementById('hedef-target').textContent = target;
+  document.getElementById('hedef-title').textContent = title;
+  document.getElementById('hedef-sub').textContent = sub;
+  document.getElementById('hedef-ring-pct') && (document.getElementById('hedef-ring-pct').textContent = pct + '%');
+
+  // Ring doldur (beyaz ring, kart 100%'de yeşile döner)
+  const fill = document.getElementById('hedef-ring-fill');
+  if (fill) fill.style.strokeDashoffset = HEDEF_RING_CIRC * (1 - pct / 100);
+  card.classList.toggle('hedef-done-state', pct >= 100);
+
+  // Bildirim izni yoksa "Bildirimleri Aç" butonunu göster
+  const notifBtn = document.getElementById('hedef-notif-btn');
+  if (notifBtn) {
+    const needsPerm = ('Notification' in window) && Notification.permission !== 'granted';
+    notifBtn.classList.toggle('hidden', !needsPerm);
+  }
+}
+
+function editHedef() {
+  const cur = getHedefTarget();
+  const val = prompt('Günlük hedefin (işlem/görüşme sayısı):', cur);
+  if (val === null) return;
+  const n = parseInt(val, 10);
+  if (!n || n <= 0) { alert('Geçerli bir sayı girin.'); return; }
+  localStorage.setItem('sp_daily_target', String(n));
+  renderHedef();
+  if (typeof showToast === 'function') showToast(`Günlük hedef ${n} olarak ayarlandı`);
+}
+
+/* ──────────────────────────────────────────────
+   HATIRLATICI + MOTİVASYON BİLDİRİMLERİ
+   08:30 – 17:00 arası belirli saatlerde
+────────────────────────────────────────────── */
+const REMINDER_SLOTS = ['08:30','10:00','11:30','13:30','15:00','16:30'];
+let _reminderTimer = null;
+
+function initReminders() {
+  if (state.isDemoMode) return;
+  if (!('Notification' in window)) return;
+  // İzin iste (login bir kullanıcı etkileşimidir → izin penceresi açılabilir)
+  if (Notification.permission === 'default') {
+    try { Notification.requestPermission(); } catch (e) {}
+  }
+  if (_reminderTimer) clearInterval(_reminderTimer);
+  _reminderTimer = setInterval(checkReminders, 30000); // 30 sn'de bir kontrol
+  checkReminders();
+}
+
+function checkReminders() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const now = new Date();
+  const hhmm = now.toTimeString().slice(0, 5);
+  if (!REMINDER_SLOTS.includes(hhmm)) return;
+  const key = `sp_rem_${now.toISOString().slice(0,10)}_${hhmm}`;
+  if (localStorage.getItem(key)) return; // bu slot bugün gönderildi
+  localStorage.setItem(key, '1');
+  fireReminder();
+}
+
+async function fireReminder() {
+  // Güncel ilerlemeyi çek
+  let done = state.hedefDone || 0;
+  const target = getHedefTarget();
+  try { const s = await apiFetch('/api/stats'); done = s?.today?.total ?? done; } catch {}
+  const remaining = Math.max(0, target - done);
+
+  const titles = ['📞 Arama Zamanı!', '💪 Hedefine Devam!', '🚀 Bir Mola, Bir Arama!', '🔥 Satış Vakti!', '⭐ Hadi Bir Müşteri Daha!'];
+  const title = titles[Math.floor(Math.random() * titles.length)];
+  const body = remaining > 0
+    ? `Bugün ${done}/${target} işlem yaptın. Hedefe ${remaining} kaldı — hadi birkaç müşteri daha ara! 📈`
+    : `Bugün ${done}/${target} — hedefini aştın! 🎉 Her ekstra arama bonus.`;
+
+  try {
+    const n = new Notification(title, { body, tag: 'sp-reminder', renotify: true });
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch (e) {}
+}
+
+// Manuel test/izin butonu için
+function requestReminderPermission() {
+  if (!('Notification' in window)) { alert('Tarayıcınız bildirimleri desteklemiyor.'); return; }
+  Notification.requestPermission().then(p => {
+    if (p === 'granted') {
+      if (typeof showToast === 'function') showToast('🔔 Bildirimler açıldı — 08:30-17:00 arası hatırlatma alacaksın');
+      initReminders();
+    } else {
+      alert('Bildirim izni verilmedi. Tarayıcı ayarlarından açabilirsiniz.');
+    }
+  });
 }
 
 // Dashboard: sıcak müşteri hatırlatma kartı (aksiyon alınabilir)

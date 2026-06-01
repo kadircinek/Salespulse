@@ -177,104 +177,27 @@
           <div class="hero-date" id="hero-date"></div>
         </div>
 
-        <!-- Session Card -->
-        <div class="session-card" id="session-card">
-          <!-- Top row: timer | stats + button -->
-          <div class="session-top-row">
-            <div class="session-info">
-              <div class="session-badge" id="session-badge">
-                <span class="session-dot"></span>
-                <span id="session-badge-text">Hazır</span>
-              </div>
-              <div class="session-timer" id="session-timer">00:00</div>
-              <div class="session-time-label">Seans Süresi</div>
-            </div>
-            <div class="session-actions">
-              <div class="session-stats">
-                <div class="session-stat">
-                  <div class="session-stat-val" id="session-total-count">0</div>
-                  <div class="session-stat-lbl">Müşteri</div>
-                </div>
-                <div class="session-stat">
-                  <div class="session-stat-val" id="session-done-count">0</div>
-                  <div class="session-stat-lbl">Tamamlandı</div>
-                </div>
-              </div>
-              <div class="session-duration-wrap">
-                <select id="session-duration" class="session-duration-sel" title="Müşteri başına süre">
-                  <option value="120">2 dk</option>
-                  <option value="180">3 dk</option>
-                  <option value="300" selected>5 dk</option>
-                  <option value="600">10 dk</option>
-                </select>
-              </div>
-              <button class="session-start-btn" id="session-start-btn">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                Başlat
-              </button>
+        <!-- Günlük Hedef Kartı -->
+        <div class="hedef-card" id="hedef-card">
+          <div class="hedef-ring-wrap">
+            <svg viewBox="0 0 120 120" class="hedef-ring">
+              <circle class="hedef-ring-bg" cx="60" cy="60" r="50"/>
+              <circle class="hedef-ring-fill" id="hedef-ring-fill" cx="60" cy="60" r="50"
+                      stroke-dasharray="314.16" stroke-dashoffset="314.16"/>
+            </svg>
+            <div class="hedef-ring-center">
+              <div class="hedef-ring-done" id="hedef-done">0</div>
+              <div class="hedef-ring-target">/ <span id="hedef-target">20</span></div>
             </div>
           </div>
-          <!-- Expiry toast (shown when countdown hits 0) -->
-          <div class="session-expired-toast" id="session-expired-toast">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            Süre doldu! Sonraki müşteriye geçiliyor…
-          </div>
-
-          <!-- Bottom row: current customer (shown when active) -->
-          <div class="session-customer" id="session-customer">
-            <div class="session-customer-avatar" id="session-customer-avatar">–</div>
-            <div class="session-customer-info">
-              <div class="session-customer-name" id="session-customer-name">–</div>
-              <div class="session-customer-phone" id="session-customer-phone">–</div>
-            </div>
-            <!-- Feature 9: WhatsApp / Mail / Ara kısayolları -->
-            <div class="session-quick-actions" id="session-quick-actions">
-              <a class="sq-btn sq-call" id="sq-call" href="#" title="Ara">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.06 1.18 2 2 0 012.03 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006.29 6.29l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-                Ara
-              </a>
-              <a class="sq-btn sq-wa" id="sq-wa" href="#" target="_blank" title="WhatsApp">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.998 0C5.373 0 0 5.373 0 12c0 2.126.554 4.122 1.523 5.858L.054 23.276a.5.5 0 00.611.639l5.565-1.456A11.945 11.945 0 0011.998 24C18.625 24 24 18.627 24 12S18.625 0 11.998 0zm0 21.818a9.823 9.823 0 01-5.001-1.368l-.358-.213-3.708.972.988-3.613-.233-.372A9.816 9.816 0 012.181 12c0-5.418 4.399-9.818 9.817-9.818 5.418 0 9.818 4.4 9.818 9.818 0 5.419-4.4 9.818-9.818 9.818z"/></svg>
-                WhatsApp
-              </a>
-              <a class="sq-btn sq-mail" id="sq-mail" href="#" title="Mail">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                Mail
-              </a>
-            </div>
-          </div>
-
-          <!-- Sonuç + Not (müşteri aktifken göster) -->
-          <div class="session-result-panel" id="session-result-panel">
-            <div class="session-result-btns" id="session-result-btns">
-              <button class="result-btn" data-result="görüşüldü">✅ Görüşüldü</button>
-              <button class="result-btn" data-result="mail_atıldı">📧 Mail Atıldı</button>
-              <button class="result-btn" data-result="ulaşılamadı">📵 Ulaşılamadı</button>
-              <button class="result-btn" data-result="ziyaret_planlandı">📅 Ziyaret Planlandı</button>
-              <button class="result-btn" data-result="takip_gerekiyor">🔄 Takip Gerekiyor</button>
-            </div>
-            <!-- Feature 2: Takip tarihi seçici (Takip Gerekiyor seçilince görünür) -->
-            <div class="followup-picker hidden" id="followup-picker">
-              <div class="followup-label">📅 Tekrar Arama Tarihi:</div>
-              <div class="followup-options">
-                <button class="fu-btn" data-days="1">Yarın</button>
-                <button class="fu-btn" data-days="3">3 Gün</button>
-                <button class="fu-btn" data-days="7">1 Hafta</button>
-                <button class="fu-btn" data-days="14">2 Hafta</button>
-                <input type="date" id="followup-custom-date" class="fu-date-input" title="Özel tarih"/>
-              </div>
-            </div>
-            <textarea
-              id="session-note"
-              class="session-note-input"
-              placeholder="Not ekle (isteğe bağlı)…"
-              rows="2"
-            ></textarea>
-            <div class="session-result-footer">
-              <button class="session-save-btn" id="session-save-btn" disabled>
-                💾 Kaydet ve Sonraki →
-              </button>
-              <button class="session-skip-btn" id="session-skip-btn">Geç →</button>
+          <div class="hedef-info">
+            <div class="hedef-label">🎯 BUGÜNKÜ HEDEFİN</div>
+            <div class="hedef-title" id="hedef-title">Hadi başlayalım!</div>
+            <div class="hedef-sub" id="hedef-sub">Her görüşme seni hedefe yaklaştırır.</div>
+            <div class="hedef-actions">
+              <button class="hedef-edit-btn" id="hedef-edit-btn">✎ Hedefi Ayarla</button>
+              <button class="hedef-call-btn" id="hedef-call-btn">📞 Aramaya Başla</button>
+              <button class="hedef-edit-btn hidden" id="hedef-notif-btn">🔔 Bildirimleri Aç</button>
             </div>
           </div>
         </div>

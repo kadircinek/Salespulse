@@ -19,9 +19,35 @@ module.exports = async (req, res) => {
 
   const sql = getDb();
 
-  // ── GET: müşteri geçmişi ──────────────────────────────────────
+  // ── GET ───────────────────────────────────────────────────────
   if (req.method === 'GET') {
-    const { customer_id } = req.query || {};
+    const { customer_id, scope, user_id } = req.query || {};
+
+    // Admin: tüm ekibin son aktiviteleri (kim kimi aradı, ne sonuç)
+    if (scope === 'team') {
+      if (user.role !== 'admin')
+        return res.status(403).json({ error: 'Yönetici yetkisi gerekli' });
+      let rows;
+      if (user_id) {
+        rows = await sql`
+          SELECT a.*, u.name AS rep_name, c.company_name, c.contact_name
+          FROM activities a
+          LEFT JOIN users u ON u.id = a.created_by
+          LEFT JOIN customers c ON c.id = a.customer_id
+          WHERE a.created_by = ${user_id}
+          ORDER BY a.created_at DESC LIMIT 100`;
+      } else {
+        rows = await sql`
+          SELECT a.*, u.name AS rep_name, c.company_name, c.contact_name
+          FROM activities a
+          LEFT JOIN users u ON u.id = a.created_by
+          LEFT JOIN customers c ON c.id = a.customer_id
+          ORDER BY a.created_at DESC LIMIT 100`;
+      }
+      return res.json(rows);
+    }
+
+    // Müşteri geçmişi
     if (!customer_id) return res.status(400).json({ error: 'customer_id gerekli' });
     const rows = await sql`
       SELECT a.*, u.name as created_by_name

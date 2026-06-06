@@ -91,6 +91,9 @@ let state = {
   // Sıcak müşteriler (tekrar satış)
   warmInterval: 15,
   warmTemplate: '',
+  // Ekip yönetimi
+  teamUsers: [],
+  teamTab: 'reps',
   // Session
   sessionActive: false,
   sessionSeconds: 0,
@@ -342,6 +345,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const hedefNotif = document.getElementById('hedef-notif-btn');
   if (hedefNotif) hedefNotif.addEventListener('click', requestReminderPermission);
 
+  // Ekip yönetimi
+  const addUserBtn = document.getElementById('add-user-btn');
+  if (addUserBtn) addUserBtn.addEventListener('click', openUserModal);
+  ['user-modal-close','user-modal-cancel','user-modal-backdrop'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.addEventListener('click', closeUserModal);
+  });
+  const userSubmit = document.getElementById('user-modal-submit');
+  if (userSubmit) userSubmit.addEventListener('click', submitUser);
+  document.querySelectorAll('[data-teamtab]').forEach(t =>
+    t.addEventListener('click', () => switchTeamTab(t.dataset.teamtab)));
+  const actRep = document.getElementById('team-activity-rep');
+  if (actRep) actRep.addEventListener('change', renderTeamActivity);
+
   // Bulk select all
   document.getElementById('bulk-select-all').addEventListener('change', (e) => {
     const customers = state.isDemoMode ? DEMO_CUSTOMERS : state.customers;
@@ -535,6 +551,10 @@ function enterApp() {
     fetchUsers().then(users => { state.users = users; });
   }
 
+  // Admin'e özel menüleri göster
+  const isAdmin = state.currentUser?.role === 'admin';
+  document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !isAdmin));
+
   navigateTo('dashboard');
   // Hatırlatıcı bildirimleri başlat (08:30-17:00)
   initReminders();
@@ -551,6 +571,7 @@ const PAGE_TITLES = {
   performance: 'Performans',
   sequences:   "Sequence'ler",
   warm:        'Sıcak Müşteriler',
+  team:        'Ekip Yönetimi',
 };
 
 function navigateTo(page) {
@@ -575,6 +596,7 @@ function navigateTo(page) {
   else if (page === 'performance') renderPerformance();
   else if (page === 'sequences')   renderSequences();
   else if (page === 'warm')        renderWarm();
+  else if (page === 'team')        renderTeam();
 }
 
 /* ──────────────────────────────────────────────
@@ -1777,6 +1799,155 @@ async function warmMarkContacted(id) {
     if (state.currentPage === 'warm') renderWarm();
     else if (state.currentPage === 'dashboard') renderWarmTrigger();
     else updateWarmBadge();
+  } catch (e) { alert('Hata: ' + e.message); }
+}
+
+/* ──────────────────────────────────────────────
+   EKİP YÖNETİMİ (Admin)
+────────────────────────────────────────────── */
+const SEQ_RESULT_LABELS = {
+  'görüşüldü':'✅ Görüşüldü', 'mail_atıldı':'📧 Mail/Mesaj', 'ulaşılamadı':'📵 Ulaşılamadı',
+  'ziyaret_planlandı':'📅 Ziyaret', 'takip_gerekiyor':'🔄 Takip', 'tekrar_temas':'🔁 Tekrar Satış',
+};
+
+async function renderTeam() {
+  if (state.currentUser?.role !== 'admin') {
+    document.getElementById('team-reps-container').innerHTML =
+      '<div class="dash-empty">Bu sayfa yalnızca yöneticiler içindir.</div>';
+    return;
+  }
+  // Veri çek
+  let users = [], stats = null;
+  try { users = await apiFetch('/api/users'); } catch {}
+  try { stats = await apiFetch('/api/stats'); } catch {}
+  state.teamUsers = users;
+
+  // Aktivite filtresi dropdown'u
+  const repSel = document.getElementById('team-activity-rep');
+  if (repSel) {
+    repSel.innerHTML = '<option value="">Tüm temsilciler</option>' +
+      users.map(u => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('');
+  }
+
+  if (state.teamTab === 'activity') renderTeamActivity();
+  else renderTeamReps(users, stats);
+}
+
+function renderTeamReps(users, stats) {
+  const container = document.getElementById('team-reps-container');
+  const teamMap = {};
+  (stats?.team || []).forEach(t => { teamMap[t.id] = t; });
+
+  // Atanan müşteri sayıları
+  const assignCounts = {};
+  (state.customers || []).forEach(c => {
+    if (c.assigned_user_id) assignCounts[c.assigned_user_id] = (assignCounts[c.assigned_user_id]||0) + 1;
+  });
+
+  container.innerHTML = `<div class="team-grid">${users.map(u => {
+    const t = teamMap[u.id] || {};
+    const calls = +t.call_count || 0;
+    const target = u.daily_target || 20;
+    const pct = Math.min(100, Math.round(calls / target * 100));
+    const roleLbl = u.role === 'admin' ? '👑 Yönetici' : 'Satış Temsilcisi';
+    const assigned = assignCounts[u.id] || 0;
+    const isSelf = u.id === state.currentUser.id;
+    return `
+      <div class="team-card">
+        <div class="team-card-head">
+          <div class="team-avatar">${escapeHtml((u.name||'?').substring(0,1).toUpperCase())}</div>
+          <div style="flex:1;min-width:0">
+            <div class="team-card-name">${escapeHtml(u.name)}${isSelf ? ' <span class="team-you">(sen)</span>' : ''}</div>
+            <div class="team-card-email">${escapeHtml(u.email)} · ${roleLbl}</div>
+          </div>
+          ${!isSelf ? `<button class="team-del-btn" onclick="deleteUser('${u.id}','${escapeHtml(u.name).replace(/'/g,"")}')" title="Sil">🗑</button>` : ''}
+        </div>
+        <div class="team-card-stats">
+          <div><div class="team-stat-val">${calls}/${target}</div><div class="team-stat-lbl">Bugün arama</div></div>
+          <div><div class="team-stat-val">${assigned}</div><div class="team-stat-lbl">Atanan müşteri</div></div>
+        </div>
+        <div class="team-prog-bar"><div class="team-prog-fill" style="width:${pct}%;background:${pct>=100?'var(--green)':'var(--accent)'}"></div></div>
+        <button class="btn-secondary btn-sm" style="margin-top:10px;width:100%" onclick="viewRepActivity('${u.id}')">Aktivitelerini Gör →</button>
+      </div>`;
+  }).join('')}</div>`;
+}
+
+async function renderTeamActivity() {
+  const container = document.getElementById('team-activity-container');
+  const repId = document.getElementById('team-activity-rep')?.value || '';
+  container.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-tertiary)">Yükleniyor…</div>';
+  let acts = [];
+  try {
+    acts = await apiFetch('/api/activities?scope=team' + (repId ? '&user_id=' + repId : ''));
+  } catch (e) { container.innerHTML = '<div class="dash-empty">Aktivite yüklenemedi.</div>'; return; }
+  if (!acts.length) { container.innerHTML = '<div class="dash-empty">Henüz aktivite kaydı yok.</div>'; return; }
+
+  container.innerHTML = `<div class="team-act-list">${acts.map(a => {
+    const result = SEQ_RESULT_LABELS[a.result] || a.result || '–';
+    return `
+      <div class="team-act-row">
+        <div class="team-act-rep">${escapeHtml(a.rep_name || '?')}</div>
+        <div class="team-act-main">
+          <div class="team-act-company">${escapeHtml(a.company_name || '–')}${a.contact_name ? ' · '+escapeHtml(a.contact_name) : ''}</div>
+          ${a.note ? `<div class="team-act-note">${escapeHtml(a.note)}</div>` : ''}
+        </div>
+        <div class="team-act-meta">
+          <div class="team-act-result">${result}</div>
+          <div class="team-act-time">${timeAgo(a.created_at)}</div>
+        </div>
+      </div>`;
+  }).join('')}</div>`;
+}
+
+function switchTeamTab(tab) {
+  state.teamTab = tab;
+  document.querySelectorAll('[data-teamtab]').forEach(t => t.classList.toggle('active', t.dataset.teamtab === tab));
+  document.getElementById('team-tab-reps').classList.toggle('hidden', tab !== 'reps');
+  document.getElementById('team-tab-activity').classList.toggle('hidden', tab !== 'activity');
+  if (tab === 'activity') renderTeamActivity(); else renderTeam();
+}
+
+function viewRepActivity(userId) {
+  state.teamTab = 'activity';
+  switchTeamTab('activity');
+  const sel = document.getElementById('team-activity-rep');
+  if (sel) { sel.value = userId; renderTeamActivity(); }
+}
+
+// Temsilci oluşturma modalı
+function openUserModal() {
+  ['user-name','user-email','user-password'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('user-role').value = 'sales_rep';
+  document.getElementById('user-target').value = '20';
+  document.getElementById('user-modal-error').classList.add('hidden');
+  document.getElementById('user-modal-backdrop').classList.remove('hidden');
+  document.getElementById('user-modal').classList.remove('hidden');
+}
+function closeUserModal() {
+  document.getElementById('user-modal-backdrop').classList.add('hidden');
+  document.getElementById('user-modal').classList.add('hidden');
+}
+async function submitUser() {
+  const name = document.getElementById('user-name').value.trim();
+  const email = document.getElementById('user-email').value.trim();
+  const password = document.getElementById('user-password').value;
+  const role = document.getElementById('user-role').value;
+  const daily_target = parseInt(document.getElementById('user-target').value, 10) || 20;
+  const errEl = document.getElementById('user-modal-error');
+  if (!name || !email || !password) { errEl.textContent = 'Ad, e-posta ve şifre gerekli.'; errEl.classList.remove('hidden'); return; }
+  try {
+    await apiFetch('/api/users', { method: 'POST', body: { name, email, password, role, daily_target } });
+    closeUserModal();
+    showToast(`✅ ${name} eklendi`);
+    renderTeam();
+  } catch (e) { errEl.textContent = '⚠ ' + e.message; errEl.classList.remove('hidden'); }
+}
+async function deleteUser(id, name) {
+  if (!confirm(`${name} silinsin mi? Atanan müşterileri "atanmamış" olur.`)) return;
+  try {
+    await apiFetch(`/api/users?id=${id}`, { method: 'DELETE' });
+    showToast(`${name} silindi`);
+    renderTeam();
   } catch (e) { alert('Hata: ' + e.message); }
 }
 

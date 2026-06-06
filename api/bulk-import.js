@@ -53,6 +53,7 @@ module.exports = async (req, res) => {
   let inserted = 0;
   let skipped  = 0;
   const errors = [];
+  const insertedIds = [];
 
   for (let i = 0; i < customers.length; i++) {
     const c = customers[i];
@@ -84,7 +85,7 @@ module.exports = async (req, res) => {
     const confidenceFinal = (!isNaN(confidence) && confidence >= 0 && confidence <= 100) ? confidence : null;
 
     try {
-      await sql`
+      const ins = await sql`
         INSERT INTO customers
           (company_name, contact_name, phone, email, sector, city,
            status, notes, fit_score, confidence, linkedin_url, title, assigned_user_id)
@@ -101,9 +102,11 @@ module.exports = async (req, res) => {
            ${confidenceFinal},
            ${(c.linkedin_url||'').toString().trim()},
            ${(c.title||'').toString().trim()},
-           ${user.id})
+           ${null})
+        RETURNING id, status
       `;
       inserted++;
+      if (ins[0]) insertedIds.push({ id: ins[0].id, status: ins[0].status });
       // Yeni eklenen kaydı duplicate setine ekle (aynı batch içinde tekrar eklenmesin)
       existingSet.add(dupeKey);
     } catch (err) {
@@ -111,5 +114,8 @@ module.exports = async (req, res) => {
     }
   }
 
-  return res.json({ inserted, skipped, errors });
+  // Eklenen cold müşterilerin id'leri → çağıran taraf toplu enroll eder (timeout riski olmadan)
+  const enrollableIds = insertedIds.filter(x => x.status !== 'sold' && x.status !== 'lost').map(x => x.id);
+
+  return res.json({ inserted, skipped, errors, inserted_ids: insertedIds.map(x => x.id), enrollable_ids: enrollableIds });
 };

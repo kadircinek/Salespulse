@@ -2,6 +2,7 @@
 // POST /api/customers          → yeni müşteri ekle
 // PUT  /api/customers?id=uuid  → müşteri güncelle
 const { getDb, cors, verifyToken } = require('./_db');
+const { autoEnroll } = require('./_enroll');
 
 module.exports = async (req, res) => {
   cors(res);
@@ -43,6 +44,7 @@ module.exports = async (req, res) => {
 
       if (!company_name) return res.status(400).json({ error: 'company_name gerekli' });
 
+      const assignedTo = req.body?.assigned_user_id || null;  // varsayılan: atanmamış
       const rows = await sql`
         INSERT INTO customers
           (company_name, contact_name, phone, email, sector, city,
@@ -51,9 +53,11 @@ module.exports = async (req, res) => {
           (${company_name}, ${contact_name||''}, ${phone||''}, ${email||''},
            ${sector||''}, ${city||''}, ${status||'new'}, ${notes||''},
            ${fit_score||null}, ${linkedin_url||''}, ${title||''}, ${confidence||null},
-           ${user.id})
+           ${assignedTo})
         RETURNING *
       `;
+      // Otomatik sequence kaydı (cold müşteri ise; sold/lost atlanır)
+      await autoEnroll(sql, rows[0].id, user.id);
       return res.status(201).json(rows[0]);
     }
 
@@ -108,6 +112,20 @@ module.exports = async (req, res) => {
               AND t.status = 'pending'
           `;
         } catch (e) { /* sequence tabloları henüz yoksa sessiz geç */ }
+      }
+
+      // Temsilci değiştiyse bekleyen sequence görevlerini yeni temsilciye taşı
+      if (assigned_user_id) {
+        try {
+          await sql`
+            UPDATE sequence_tasks t
+            SET assigned_user_id = ${assigned_user_id}
+            FROM sequence_enrollments e
+            WHERE t.enrollment_id = e.id
+              AND e.customer_id = ${id}
+              AND t.status = 'pending'
+          `;
+        } catch (e) { /* sessiz geç */ }
       }
 
       return res.json(rows[0]);

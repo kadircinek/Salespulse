@@ -1159,6 +1159,22 @@ const SEQ_STEP_TYPES = {
 };
 const SEQ_STATUS_LABELS = { active: 'Aktif', paused: 'Duraklatıldı', archived: 'Arşiv' };
 
+// Verilen müşteri id'lerini varsayılan (aktif, adımı olan) sequence'e toplu ekle
+async function enrollIdsIntoDefaultSequence(ids) {
+  if (!ids || !ids.length) return;
+  try {
+    if (!state.sequences.length) state.sequences = await fetchSequences();
+    const seq = state.sequences.find(s => (s.status || 'active') === 'active' && +s.step_count > 0);
+    if (!seq) return;
+    for (let i = 0; i < ids.length; i += 20) {
+      await apiFetch('/api/sequence-enrollments', {
+        method: 'POST',
+        body: { sequence_id: seq.id, customer_ids: ids.slice(i, i + 20) },
+      });
+    }
+  } catch (e) { /* sessiz geç */ }
+}
+
 // ── API yardımcıları ──
 async function fetchSequences()    { try { return await apiFetch('/api/sequences'); } catch { return []; } }
 async function fetchSeqTasks()     { try { return await apiFetch('/api/sequence-tasks'); } catch { return []; } }
@@ -3084,9 +3100,12 @@ async function submitExcelImport() {
   try {
     const result = await apiFetch('/api/bulk-import', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ customers: payload }),
+      body: { customers: payload },
     });
+    // Yeni eklenen cold müşterileri otomatik sequence'e ekle
+    if (result.enrollable_ids?.length) {
+      await enrollIdsIntoDefaultSequence(result.enrollable_ids);
+    }
     xiShowResult(result.inserted, result.skipped || 0, result.errors || []);
   } catch (err) {
     errEl.textContent = '⚠ Hata: ' + err.message;

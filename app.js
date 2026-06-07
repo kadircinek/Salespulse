@@ -91,6 +91,9 @@ let state = {
   // Sıcak müşteriler (tekrar satış)
   warmInterval: 15,
   warmTemplate: '',
+  // Ürünler
+  products: [],
+  productGroupFilter: '',
   // Ekip yönetimi
   teamUsers: [],
   teamTab: 'reps',
@@ -249,6 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (state.currentPage === 'calls') renderCalls();
     else if (state.currentPage === 'sequences') renderSequences();
     else if (state.currentPage === 'warm') renderWarm();
+    else if (state.currentPage === 'products') renderProducts();
   });
 
   // Mobile menu toggle
@@ -344,6 +348,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (hedefCall) hedefCall.addEventListener('click', () => navigateTo('calls'));
   const hedefNotif = document.getElementById('hedef-notif-btn');
   if (hedefNotif) hedefNotif.addEventListener('click', requestReminderPermission);
+
+  // Ürünler
+  const prodSearch = document.getElementById('product-search');
+  if (prodSearch) prodSearch.addEventListener('input', (e) => renderProducts(e.target.value));
 
   // Ekip yönetimi
   const addUserBtn = document.getElementById('add-user-btn');
@@ -571,6 +579,7 @@ const PAGE_TITLES = {
   performance: 'Performans',
   sequences:   "Sequence'ler",
   warm:        'Sıcak Müşteriler',
+  products:    'Ürünler',
   team:        'Ekip Yönetimi',
 };
 
@@ -596,6 +605,7 @@ function navigateTo(page) {
   else if (page === 'performance') renderPerformance();
   else if (page === 'sequences')   renderSequences();
   else if (page === 'warm')        renderWarm();
+  else if (page === 'products')    renderProducts();
   else if (page === 'team')        renderTeam();
 }
 
@@ -1803,6 +1813,140 @@ async function warmMarkContacted(id) {
 }
 
 /* ──────────────────────────────────────────────
+   ÜRÜNLER (Stok Kataloğu)
+────────────────────────────────────────────── */
+async function fetchProducts() { try { return await apiFetch('/api/products'); } catch { return []; } }
+
+async function renderProducts(search = (document.getElementById('product-search')?.value || '')) {
+  const tbody = document.getElementById('products-tbody');
+  if (!tbody) return;
+  if (state.isDemoMode) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-tertiary)">Ürünler canlı modda görünür.</td></tr>';
+    return;
+  }
+  if (!state.products.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-tertiary)">Yükleniyor…</td></tr>';
+    state.products = await fetchProducts();
+  }
+  const all = state.products;
+
+  // Grup çiplerini doldur
+  const chipsEl = document.getElementById('product-group-chips');
+  if (chipsEl && !chipsEl.dataset.filled) {
+    const groups = [...new Set(all.map(p => (p.product_group || '').trim()).filter(Boolean))].sort();
+    chipsEl.innerHTML =
+      `<button class="chip active" data-group="">Tümü</button>` +
+      groups.map(g => `<button class="chip" data-group="${escapeAttr(g)}">${escapeHtml(g)}</button>`).join('');
+    chipsEl.dataset.filled = '1';
+    chipsEl.querySelectorAll('.chip').forEach(ch => ch.addEventListener('click', () => {
+      state.productGroupFilter = ch.dataset.group || '';
+      chipsEl.querySelectorAll('.chip').forEach(x => x.classList.toggle('active', x === ch));
+      renderProducts();
+    }));
+  }
+
+  let items = all;
+  if (state.productGroupFilter) items = items.filter(p => (p.product_group || '') === state.productGroupFilter);
+  if (search) {
+    const q = search.toLowerCase();
+    items = items.filter(p =>
+      (p.name || '').toLowerCase().includes(q) || (p.product_group || '').toLowerCase().includes(q));
+  }
+
+  const fmtNum = (v) => v == null ? '–' : Number(v).toLocaleString('tr-TR');
+  tbody.innerHTML = items.length ? items.map(p => {
+    const lowStock = p.stock_qty != null && Number(p.stock_qty) <= 500;
+    return `
+      <tr>
+        <td><span class="product-group-tag">${escapeHtml(p.product_group || '–')}</span></td>
+        <td><div class="product-name">${escapeHtml(p.name)}</div></td>
+        <td><span class="product-stock ${lowStock ? 'low' : ''}">${fmtNum(p.stock_qty)} ${escapeHtml(p.unit || 'kg')}</span></td>
+        <td>${p.cost != null ? fmtNum(p.cost) + ' ₺' : '–'}</td>
+      </tr>`;
+  }).join('') : '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-tertiary)">Ürün bulunamadı.</td></tr>';
+
+  const cnt = document.getElementById('products-count-text');
+  if (cnt) cnt.textContent = `${items.length} ürün`;
+
+  // Admin için ekle butonu
+  const addBtn = document.getElementById('add-product-btn');
+  if (addBtn) addBtn.classList.toggle('hidden', state.currentUser?.role !== 'admin');
+}
+
+// Drawer: müşteri ürün kullanımı bölümü
+function renderCustProductsSection(customerId, list) {
+  const fmt = (v) => v == null ? '' : Number(v).toLocaleString('tr-TR');
+  // En son güncelleme
+  const last = list[0];
+  const lastInfo = last
+    ? `<span class="cp-last">Son güncelleme: ${formatDate(last.updated_at)}${last.updated_by_name ? ' · ' + escapeHtml(last.updated_by_name) : ''}</span>`
+    : '';
+
+  const rows = list.length
+    ? list.map(p => `
+        <div class="cp-row">
+          <div class="cp-row-main">
+            <div class="cp-row-name">${escapeHtml(p.product_name)}${p.product_group ? ` <span class="cp-grp">${escapeHtml(p.product_group)}</span>` : ''}</div>
+            ${p.note ? `<div class="cp-row-note">${escapeHtml(p.note)}</div>` : ''}
+          </div>
+          <div class="cp-row-qty">${p.quantity_kg != null ? fmt(p.quantity_kg) + ' kg' : '—'}</div>
+          <button class="cp-del" onclick="removeCustProduct('${p.id}','${customerId}')" title="Sil">✕</button>
+        </div>`).join('')
+    : '<div style="color:var(--text-tertiary);font-size:13px;padding:4px 0">Henüz ürün kullanımı girilmemiş</div>';
+
+  // Ürün dropdown (gruba göre)
+  const byGroup = {};
+  (state.products || []).forEach(p => { (byGroup[p.product_group || 'Diğer'] = byGroup[p.product_group || 'Diğer'] || []).push(p); });
+  const optGroups = Object.keys(byGroup).sort().map(g =>
+    `<optgroup label="${escapeAttr(g)}">` +
+    byGroup[g].map(p => `<option value="${p.id}" data-name="${escapeAttr(p.name)}">${escapeHtml(p.name)}</option>`).join('') +
+    `</optgroup>`).join('');
+
+  return `
+    <div class="drawer-section">
+      <div class="drawer-section-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>📦 Ürün Kullanımı</span>${lastInfo}
+      </div>
+      <div class="cp-list">${rows}</div>
+      <div class="cp-add">
+        <select id="cp-product-select" class="cp-input cp-select">
+          <option value="">Ürün seç…</option>
+          ${optGroups}
+        </select>
+        <input id="cp-qty" type="number" min="0" step="any" class="cp-input cp-qty-input" placeholder="kg"/>
+        <input id="cp-note" type="text" class="cp-input cp-note-input" placeholder="Not (ops.)"/>
+        <button class="btn-primary btn-sm" onclick="addCustProduct('${customerId}')">Ekle</button>
+      </div>
+    </div>`;
+}
+
+async function addCustProduct(customerId) {
+  const sel = document.getElementById('cp-product-select');
+  const opt = sel.options[sel.selectedIndex];
+  const productId = sel.value;
+  const productName = opt ? (opt.dataset.name || opt.textContent) : '';
+  if (!productId || !productName) { alert('Lütfen bir ürün seçin.'); return; }
+  const qty = document.getElementById('cp-qty').value;
+  const note = document.getElementById('cp-note').value;
+  try {
+    await apiFetch('/api/customer-products', {
+      method: 'POST',
+      body: { customer_id: customerId, product_id: productId, product_name: productName, quantity_kg: qty, note },
+    });
+    if (typeof showToast === 'function') showToast('Ürün kullanımı kaydedildi');
+    showCustomerDrawer(customerId); // drawer'ı tazele
+  } catch (e) { alert('Hata: ' + e.message); }
+}
+
+async function removeCustProduct(id, customerId) {
+  if (!confirm('Bu ürün kullanımı silinsin mi?')) return;
+  try {
+    await apiFetch(`/api/customer-products?id=${id}`, { method: 'DELETE' });
+    showCustomerDrawer(customerId);
+  } catch (e) { alert('Hata: ' + e.message); }
+}
+
+/* ──────────────────────────────────────────────
    EKİP YÖNETİMİ (Admin)
 ────────────────────────────────────────────── */
 const SEQ_RESULT_LABELS = {
@@ -1987,11 +2131,15 @@ async function showCustomerDrawer(id) {
   // Sequence kayıtları + görevleri (ilerleme hesabı için)
   let custEnrollments = [];
   let custTasks = [];
+  let custProducts = [];
   if (!state.isDemoMode && c.id) {
     try { custEnrollments = await apiFetch(`/api/sequence-enrollments?customer_id=${c.id}`); }
     catch { custEnrollments = []; }
     try { custTasks = await apiFetch(`/api/sequence-tasks?customer_id=${c.id}`); }
     catch { custTasks = []; }
+    try { custProducts = await apiFetch(`/api/customer-products?customer_id=${c.id}`); }
+    catch { custProducts = []; }
+    if (!state.products.length) { try { state.products = await fetchProducts(); } catch {} }
   }
 
   // Related offers
@@ -2112,9 +2260,13 @@ async function showCustomerDrawer(id) {
       </div>`;
   })();
 
+  // Ürün kullanımı bölümü (en son görüşmedeki kullanım)
+  const productsHtml = state.isDemoMode ? '' : renderCustProductsSection(c.id, custProducts);
+
   document.getElementById('drawer-body').innerHTML = `
     ${contactBtns}
     ${assignHtml}
+    ${productsHtml}
     ${seqHtml}
     <div class="drawer-section">
       <div class="drawer-section-title">Bilgiler</div>

@@ -2650,3 +2650,32 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 .team-act-result { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
 .team-act-time { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
 .user-form-row { display: flex; gap: 12px; margin-top: 12px; }
+
+/* ═══ ÜRÜNLER ═══ */
+.product-group-tag {
+  display: inline-block; background: var(--accent-light); color: var(--accent);
+  font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 6px;
+}
+.product-name { font-weight: 600; color: var(--text-primary); font-size: 13.5px; }
+.product-stock { font-weight: 600; color: var(--text-primary); }
+.product-stock.low { color: var(--orange); }
+
+/* Drawer ürün kullanımı */
+.cp-last { font-size: 11px; color: var(--text-tertiary); font-weight: 500; }
+.cp-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.cp-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg); border-radius: var(--radius-sm); padding: 8px 12px;
+}
+.cp-row-main { flex: 1; min-width: 0; }
+.cp-row-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.cp-grp { font-size: 10.5px; font-weight: 700; color: var(--accent); background: var(--accent-light); padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
+.cp-row-note { font-size: 11.5px; color: var(--text-tertiary); margin-top: 1px; font-style: italic; }
+.cp-row-qty { font-size: 13px; font-weight: 700; color: var(--green); white-space: nowrap; }
+.cp-del { width: 24px; height: 24px; border-radius: 6px; color: var(--text-tertiary); background: none; cursor: pointer; flex-shrink: 0; font-size: 13px; }
+.cp-del:hover { background: #FEE2E2; color: #DC2626; }
+.cp-add { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.cp-input { padding: 7px 9px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 12.5px; background: white; }
+.cp-select { flex: 1; min-width: 130px; }
+.cp-qty-input { width: 70px; }
+.cp-note-input { flex: 1; min-width: 90px; }

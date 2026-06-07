@@ -352,6 +352,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // Ürünler
   const prodSearch = document.getElementById('product-search');
   if (prodSearch) prodSearch.addEventListener('input', (e) => renderProducts(e.target.value));
+  const addProdBtn = document.getElementById('add-product-btn');
+  if (addProdBtn) addProdBtn.addEventListener('click', () => openProductModal('add'));
+  const pmClose = document.getElementById('product-modal-close');
+  if (pmClose) pmClose.addEventListener('click', closeProductModal);
+  const pmCancel = document.getElementById('product-modal-cancel');
+  if (pmCancel) pmCancel.addEventListener('click', closeProductModal);
+  const pmBackdrop = document.getElementById('product-modal-backdrop');
+  if (pmBackdrop) pmBackdrop.addEventListener('click', closeProductModal);
+  const pmSave = document.getElementById('product-save-btn');
+  if (pmSave) pmSave.addEventListener('click', saveProduct);
+  const pmDelete = document.getElementById('product-delete-btn');
+  if (pmDelete) pmDelete.addEventListener('click', deleteProduct);
 
   // Ekip yönetimi
   const addUserBtn = document.getElementById('add-user-btn');
@@ -1854,14 +1866,15 @@ async function renderProducts(search = (document.getElementById('product-search'
   }
 
   const fmtNum = (v) => v == null ? '–' : Number(v).toLocaleString('tr-TR');
+  const isAdmin = state.currentUser?.role === 'admin';
   tbody.innerHTML = items.length ? items.map(p => {
     const lowStock = p.stock_qty != null && Number(p.stock_qty) <= 500;
     return `
-      <tr>
+      <tr ${isAdmin ? `class="row-clickable" onclick="openProductModal('edit','${p.id}')"` : ''}>
         <td><span class="product-group-tag">${escapeHtml(p.product_group || '–')}</span></td>
         <td><div class="product-name">${escapeHtml(p.name)}</div></td>
         <td><span class="product-stock ${lowStock ? 'low' : ''}">${fmtNum(p.stock_qty)} ${escapeHtml(p.unit || 'kg')}</span></td>
-        <td>${p.cost != null ? fmtNum(p.cost) + ' ₺' : '–'}</td>
+        <td>${p.cost != null ? fmtNum(p.cost) + ' ₺' : '–'}${isAdmin ? ' <span class="row-edit-hint">✎</span>' : ''}</td>
       </tr>`;
   }).join('') : '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-tertiary)">Ürün bulunamadı.</td></tr>';
 
@@ -1871,6 +1884,73 @@ async function renderProducts(search = (document.getElementById('product-search'
   // Admin için ekle butonu
   const addBtn = document.getElementById('add-product-btn');
   if (addBtn) addBtn.classList.toggle('hidden', state.currentUser?.role !== 'admin');
+}
+
+// ── Ürün ekle/düzenle modalı ──
+function openProductModal(mode, productId) {
+  if (state.currentUser?.role !== 'admin') { alert('Bu işlem için admin yetkisi gerekli.'); return; }
+  document.getElementById('product-edit-id').value = (mode === 'edit' && productId) ? productId : '';
+  document.getElementById('product-modal-title').textContent = mode === 'edit' ? 'Ürünü Düzenle' : 'Ürün Ekle';
+  document.getElementById('product-modal-error').classList.add('hidden');
+  document.getElementById('product-delete-btn').classList.toggle('hidden', mode !== 'edit');
+
+  let p = { product_group:'', name:'', stock_qty:'', cost:'', unit:'kg' };
+  if (mode === 'edit' && productId) {
+    const found = state.products.find(x => x.id === productId);
+    if (found) p = found;
+  }
+  document.getElementById('pm-group').value = p.product_group || '';
+  document.getElementById('pm-name').value  = p.name || '';
+  document.getElementById('pm-unit').value  = p.unit || 'kg';
+  document.getElementById('pm-stock').value = p.stock_qty ?? '';
+  document.getElementById('pm-cost').value  = p.cost ?? '';
+
+  document.getElementById('product-modal-backdrop').classList.remove('hidden');
+  document.getElementById('product-modal').classList.remove('hidden');
+  document.getElementById('pm-name').focus();
+}
+
+function closeProductModal() {
+  document.getElementById('product-modal-backdrop').classList.add('hidden');
+  document.getElementById('product-modal').classList.add('hidden');
+}
+
+async function saveProduct() {
+  const id = document.getElementById('product-edit-id').value;
+  const name = document.getElementById('pm-name').value.trim();
+  const errEl = document.getElementById('product-modal-error');
+  if (!name) { errEl.textContent = 'Ürün adı gerekli.'; errEl.classList.remove('hidden'); return; }
+  const body = {
+    product_group: document.getElementById('pm-group').value.trim(),
+    name,
+    unit: document.getElementById('pm-unit').value.trim() || 'kg',
+    stock_qty: document.getElementById('pm-stock').value === '' ? null : parseFloat(document.getElementById('pm-stock').value),
+    cost: document.getElementById('pm-cost').value === '' ? null : parseFloat(document.getElementById('pm-cost').value),
+  };
+  try {
+    if (id) await apiFetch(`/api/products?id=${id}`, { method: 'PUT', body });
+    else    await apiFetch('/api/products', { method: 'POST', body });
+    state.products = await fetchProducts();   // cache tazele
+    closeProductModal();
+    renderProducts();
+    if (typeof showToast === 'function') showToast(id ? 'Ürün güncellendi' : 'Ürün eklendi');
+  } catch (e) {
+    errEl.textContent = '⚠ ' + e.message; errEl.classList.remove('hidden');
+  }
+}
+
+async function deleteProduct() {
+  const id = document.getElementById('product-edit-id').value;
+  if (!id) return;
+  const p = state.products.find(x => x.id === id);
+  if (!confirm(`"${p?.name || 'Ürün'}" silinsin mi?`)) return;
+  try {
+    await apiFetch(`/api/products?id=${id}`, { method: 'DELETE' });
+    state.products = await fetchProducts();
+    closeProductModal();
+    renderProducts();
+    if (typeof showToast === 'function') showToast('Ürün silindi');
+  } catch (e) { alert('Hata: ' + e.message); }
 }
 
 // Drawer: müşteri ürün kullanımı bölümü

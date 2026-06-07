@@ -2679,3 +2679,9 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 .cp-select { flex: 1; min-width: 130px; }
 .cp-qty-input { width: 70px; }
 .cp-note-input { flex: 1; min-width: 90px; }
+
+/* Tıklanabilir tablo satırı (ürün düzenle) */
+.data-table tr.row-clickable { cursor: pointer; }
+.data-table tr.row-clickable:hover { background: var(--accent-light); }
+.row-edit-hint { color: var(--text-tertiary); margin-left: 6px; opacity: 0; transition: opacity .15s; font-size: 12px; }
+.data-table tr.row-clickable:hover .row-edit-hint { opacity: 1; color: var(--accent); }

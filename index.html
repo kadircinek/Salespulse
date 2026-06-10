@@ -96,7 +96,7 @@
       </a>
       <a class="sb-item" data-page="calls" href="#">
         <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.06 1.18 2 2 0 012.03 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006.29 6.29l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-        <span>Günlük Aramalar</span>
+        <span>Çalışma Kuyruğu</span>
         <div class="sb-badge" id="sb-badge-calls"></div>
       </a>
       <a class="sb-item" data-page="customers" href="#">
@@ -257,39 +257,29 @@
         <div id="seq-dash-board"></div>
       </div>
 
-      <!-- ─── CALLS ─── -->
+      <!-- ─── ÇALIŞMA KUYRUĞU ─── -->
       <div id="page-calls" class="page hidden">
         <div class="page-header">
           <div>
-            <h1 class="page-title">Günlük Aramalar</h1>
-            <p class="page-desc">Bugün aramanız gereken müşteri listesi</p>
+            <h1 class="page-title">Çalışma Kuyruğu</h1>
+            <p class="page-desc">Sıradaki müşteri — sonucu gir, sistem yenisini getirsin</p>
           </div>
         </div>
-        <div class="progress-banner">
-          <div class="pb-left">
-            <div class="pb-label">Bugünkü İlerleme</div>
-            <div class="pb-val"><span id="calls-done">3</span> / <span id="calls-total">12</span> <span class="pb-unit">arama tamamlandı</span></div>
-            <div class="pb-track">
-              <div class="pb-track-fill" id="pb-fill" style="width:25%"></div>
-            </div>
-          </div>
-          <div class="pb-ring">
-            <svg width="80" height="80">
-              <circle cx="40" cy="40" r="32" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="7"/>
-              <circle cx="40" cy="40" r="32" fill="none" stroke="white" stroke-width="7" stroke-linecap="round"
-                stroke-dasharray="201" stroke-dashoffset="151" id="pb-ring" transform="rotate(-90 40 40)"/>
-            </svg>
-            <div class="pb-pct" id="pb-pct">25%</div>
-          </div>
+
+        <!-- Sahipsiz müşteri uyarısı -->
+        <div id="wq-orphan-banner"></div>
+
+        <!-- Sekmeler -->
+        <div class="seq-tabs">
+          <button class="seq-tab active" data-wqtab="cold">🧊 Cold Satış <span class="seq-tab-badge hidden" id="wq-cold-badge">0</span></button>
+          <button class="seq-tab" data-wqtab="warm">🔥 Tekrar Satış <span class="seq-tab-badge hidden" id="wq-warm-badge">0</span></button>
         </div>
-        <div class="table-wrap">
-          <table class="data-table" id="calls-table">
-            <thead>
-              <tr><th>#</th><th>Firma</th><th>Yetkili</th><th>Telefon</th><th>Durum</th><th>Son Görüşme</th><th></th></tr>
-            </thead>
-            <tbody id="calls-tbody"></tbody>
-          </table>
-        </div>
+
+        <!-- İlerleme şeridi -->
+        <div class="wq-progress" id="wq-progress"></div>
+
+        <!-- Şimdiki müşteri kartı -->
+        <div id="wq-card"></div>
       </div>
 
       <!-- ─── CUSTOMERS ─── -->

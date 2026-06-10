@@ -19,6 +19,27 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       const { customer_id, scope } = req.query || {};
 
+      // Çalışma kuyruğu: müşteri başına SIRADAKİ bekleyen adım + iletişim bilgileri.
+      // started = bu müşteride en az bir adım tamamlanmış (takipteki müşteri)
+      if (scope === 'queue') {
+        const rows = await sql`
+          SELECT DISTINCT ON (t.customer_id)
+            t.id, t.customer_id, t.enrollment_id, t.step_type, t.subject, t.body, t.due_date,
+            c.company_name, c.contact_name, c.phone, c.email, c.linkedin_url,
+            c.fit_score, c.status AS customer_status, c.last_contacted, c.city, c.sector, c.title,
+            EXISTS(
+              SELECT 1 FROM sequence_tasks d
+              WHERE d.enrollment_id = t.enrollment_id AND d.status = 'done'
+            ) AS started
+          FROM sequence_tasks t
+          JOIN customers c ON c.id = t.customer_id
+          JOIN sequence_enrollments e ON e.id = t.enrollment_id AND e.status = 'active'
+          WHERE t.status = 'pending'
+          ORDER BY t.customer_id, t.due_date ASC, t.created_at ASC
+        `;
+        return res.json(rows);
+      }
+
       // Dashboard istatistikleri — tek sorguda özet sayılar
       if (scope === 'stats') {
         const r = await sql`
@@ -105,14 +126,28 @@ module.exports = async (req, res) => {
       const task = taskRows[0];
       if (!task) return res.status(404).json({ error: 'Görev bulunamadı' });
 
-      // ── ERTELE (snooze): vade tarihini ileri al, görev pending kalır ──
+      // ── ERTELE (snooze): müşterinin TÜM bekleyen adımlarını birlikte kaydır ──
+      // (görev pending kalır; takip adımları aynı aralıklarla ertelenen güne göre akar)
       if (status === 'snoozed') {
         const days = Math.max(1, parseInt(snooze_days, 10) || 1);
-        await sql`
-          UPDATE sequence_tasks
-          SET due_date = CURRENT_DATE + ${days} * INTERVAL '1 day'
-          WHERE id = ${id}
-        `;
+        if (task.step_id) {
+          await sql`
+            WITH cur AS (
+              SELECT COALESCE(day_offset, 1) AS off FROM sequence_steps WHERE id = ${task.step_id}
+            )
+            UPDATE sequence_tasks t
+            SET due_date = CURRENT_DATE + ${days} + GREATEST(COALESCE(s.day_offset, 1) - (SELECT off FROM cur), 0)
+            FROM sequence_steps s
+            WHERE t.enrollment_id = ${task.enrollment_id}
+              AND s.id = t.step_id
+              AND t.status = 'pending'
+          `;
+        } else {
+          await sql`
+            UPDATE sequence_tasks SET due_date = CURRENT_DATE + ${days} * INTERVAL '1 day'
+            WHERE id = ${id}
+          `;
+        }
         if (note) {
           try {
             await sql`INSERT INTO activities (customer_id, result, note, created_by)
@@ -171,6 +206,24 @@ module.exports = async (req, res) => {
           await sql`UPDATE sequence_tasks SET status='skipped' WHERE enrollment_id=${task.enrollment_id} AND status='pending'`;
           custStatusChanged = 'lost'; enrollmentPaused = true;
         }
+      }
+
+      // Kalan adımları BUGÜNE göre yeniden hizala (rolling kuyruk):
+      // erken/geç tamamlamada takip adımları orijinal gün aralıklarıyla bugünden itibaren akar
+      if (!enrollmentPaused && task.step_id) {
+        try {
+          await sql`
+            WITH cur AS (
+              SELECT COALESCE(day_offset, 1) AS off FROM sequence_steps WHERE id = ${task.step_id}
+            )
+            UPDATE sequence_tasks t
+            SET due_date = CURRENT_DATE + GREATEST(COALESCE(s.day_offset, 1) - (SELECT off FROM cur), 0)
+            FROM sequence_steps s
+            WHERE t.enrollment_id = ${task.enrollment_id}
+              AND s.id = t.step_id
+              AND t.status = 'pending'
+          `;
+        } catch (e) { /* sessiz geç */ }
       }
 
       // Bekleyen görev kalmadıysa kaydı tamamlandı yap

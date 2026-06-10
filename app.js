@@ -94,6 +94,8 @@ let state = {
   // Ürünler
   products: [],
   productGroupFilter: '',
+  // Çalışma kuyruğu
+  wq: { tab: 'cold', rows: [], warm: [], processed: 0, skipped: new Set(), orphans: [] },
   // Ekip yönetimi
   teamUsers: [],
   teamTab: 'reps',
@@ -324,8 +326,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('seq-enroll-cancel').addEventListener('click', closeEnrollModal);
   document.getElementById('seq-enroll-backdrop').addEventListener('click', closeEnrollModal);
   document.getElementById('seq-enroll-confirm').addEventListener('click', confirmEnroll);
-  document.querySelectorAll('.seq-tab').forEach(t =>
+  document.querySelectorAll('.seq-tab[data-seqtab]').forEach(t =>
     t.addEventListener('click', () => switchSeqTab(t.dataset.seqtab)));
+
+  // Çalışma kuyruğu sekmeleri
+  document.querySelectorAll('[data-wqtab]').forEach(t =>
+    t.addEventListener('click', () => switchWqTab(t.dataset.wqtab)));
 
   // Görev sonuç modalı
   document.getElementById('seq-outcome-close').addEventListener('click', closeOutcomeModal);
@@ -585,7 +591,7 @@ function enterApp() {
 ────────────────────────────────────────────── */
 const PAGE_TITLES = {
   dashboard:   'Dashboard',
-  calls:       'Günlük Aramalar',
+  calls:       'Çalışma Kuyruğu',
   customers:   'Müşteriler',
   offers:      'Teklifler',
   performance: 'Performans',
@@ -1128,62 +1134,280 @@ async function renderOffers() {
 /* ──────────────────────────────────────────────
    Calls
 ────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────
+   ÇALIŞMA KUYRUĞU — sıradaki müşteri, adım adım
+   🧊 Cold: sequence adımları (takipler önce, sonra
+   iletişim önceliğiyle yeni müşteriler — rolling 25)
+   🔥 Tekrar Satış: 15 gün temassız sıcak müşteriler
+────────────────────────────────────────────── */
+const WQ_VISIBLE = 25; // önde tutulacak müşteri sayısı (rolling)
+
+// İletişim bilgisi önceliği: 0=tel+linkedin, 1=linkedin, 2=tel, 3=sadece firma
+function wqTier(c) {
+  const hasPhone = !!(c.phone || '').trim();
+  const hasLi    = !!(c.linkedin_url || '').trim();
+  if (hasPhone && hasLi) return 0;
+  if (hasLi) return 1;
+  if (hasPhone) return 2;
+  return 3;
+}
+
 async function renderCalls() {
-  const customers = state.isDemoMode ? DEMO_CUSTOMERS : await fetchCustomers();
-  const callList  = customers.filter(c => ['new','to_call','unreachable','call_later'].includes(c.status));
-  const done      = (state.isDemoMode ? DEMO_ACTIVITIES : []).filter(a => a.activity_type === 'call' && a.status === 'completed').length;
-  const total     = callList.length + done;
-  const pct       = total > 0 ? Math.round((done / total) * 100) : 0;
+  const card = document.getElementById('wq-card');
+  if (!card) return;
+  if (state.isDemoMode) {
+    card.innerHTML = '<div class="dash-empty">Çalışma kuyruğu canlı modda kullanılır. Lütfen giriş yapın.</div>';
+    return;
+  }
+  card.innerHTML = '<div class="dash-empty">Kuyruk hazırlanıyor…</div>';
 
-  document.getElementById('calls-done').textContent  = done;
-  document.getElementById('calls-total').textContent = total;
-  document.getElementById('pb-pct').textContent      = pct + '%';
-  document.getElementById('pb-fill').style.width     = pct + '%';
+  // Veriler: müşteriler (warm + sahipsiz denetimi) + kuyruk satırları
+  if (!state.customers.length) { try { state.customers = await fetchCustomers(); } catch {} }
+  let rows = [];
+  try { rows = await apiFetch('/api/sequence-tasks?scope=queue'); } catch {}
+  state.wq.rows = rows;
+  if (!state.warmTemplate) loadWarmTemplate();
+  state.wq.warm = computeWarm().due;
 
-  // SVG ring (r=32, circumference ~201)
-  const circumference = 2 * Math.PI * 32;
-  const offset = circumference - (pct / 100) * circumference;
-  document.getElementById('pb-ring').style.strokeDashoffset = offset;
+  renderWqOrphans();
+  updateWqBadges();
+  renderWqCard();
+}
 
-  const tbody = document.getElementById('calls-tbody');
-  if (!callList.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="table-empty">Aranacak müşteri yok 🎉</td></tr>`;
+function wqColdQueue() {
+  const today = new Date().toISOString().slice(0, 10);
+  const day = (r) => String(r.due_date || '').slice(0, 10);
+  const rows = state.wq.rows || [];
+  // Takipteki müşteriler: en az 1 adımı yapılmış + vadesi gelmiş (önce bunlar)
+  const followups = rows.filter(r => r.started && day(r) <= today)
+    .sort((a, b) => day(a).localeCompare(day(b)) || (b.fit_score || 0) - (a.fit_score || 0));
+  // Yeni müşteriler (hiç başlanmamış) — iletişim önceliği → fit_score (rolling havuz)
+  const fresh = rows.filter(r => !r.started)
+    .sort((a, b) => wqTier(a) - wqTier(b) || (b.fit_score || 0) - (a.fit_score || 0));
+  let q = [...followups, ...fresh];
+  // Atlananlar sona
+  const skipped = state.wq.skipped;
+  if (skipped.size) q = [...q.filter(r => !skipped.has(r.customer_id)), ...q.filter(r => skipped.has(r.customer_id))];
+  return q;
+}
+
+function updateWqBadges() {
+  const coldN = Math.min(wqColdQueue().length, WQ_VISIBLE);
+  const warmN = (state.wq.warm || []).length;
+  const set = (id, n) => { const el = document.getElementById(id); if (el) { el.textContent = n; el.classList.toggle('hidden', n === 0); } };
+  set('wq-cold-badge', coldN);
+  set('wq-warm-badge', warmN);
+  const sb = document.getElementById('sb-badge-calls');
+  if (sb) sb.textContent = (coldN + warmN) > 0 ? (coldN + warmN) : '';
+}
+
+function switchWqTab(tab) {
+  state.wq.tab = tab;
+  document.querySelectorAll('[data-wqtab]').forEach(t => t.classList.toggle('active', t.dataset.wqtab === tab));
+  renderWqCard();
+}
+
+function renderWqCard() {
+  const card = document.getElementById('wq-card');
+  const prog = document.getElementById('wq-progress');
+  if (!card) return;
+
+  if (state.wq.tab === 'warm') { renderWqWarmCard(card, prog); return; }
+
+  const q = wqColdQueue();
+  const visible = q.slice(0, WQ_VISIBLE);
+  if (prog) prog.innerHTML = `
+    <span class="wq-stat">✅ Bugün işlenen: <strong>${state.wq.processed}</strong></span>
+    <span class="wq-stat">📋 Önünde: <strong>${visible.length}</strong> müşteri</span>
+    <span class="wq-stat">🗂 Toplam havuz: <strong>${q.length}</strong></span>`;
+
+  const r = visible[0];
+  if (!r) {
+    card.innerHTML = `<div class="dash-empty"><div style="font-size:36px;margin-bottom:6px">🎉</div>
+      <div style="font-weight:600;color:var(--text-secondary)">Cold kuyruğu boş — hepsi işlendi!</div></div>`;
     return;
   }
 
-  tbody.innerHTML = callList.map((c, i) => {
-    const cfg = STATUS_CONFIG[c.status] || STATUS_CONFIG.new;
-    const initials = c.company_name.substring(0,2).toUpperCase();
-    return `
-      <tr onclick="showCustomerDrawer('${c.id}')">
-        <td style="color:var(--text-tertiary);font-weight:600">${i+1}</td>
-        <td>
-          <div class="company-cell">
-            <div class="company-initials" style="background:${cfg.bg};color:${cfg.color}">${initials}</div>
-            <div class="company-main">${c.company_name}</div>
+  const cfg = SEQ_STEP_TYPES[r.step_type] || { label: r.step_type, icon: '•', bg: '#F3F4F6', color: '#6B7280' };
+  const tierLabels = ['📞+💼 Tel + LinkedIn', '💼 LinkedIn', '📞 Telefon', '🏢 Sadece firma bilgisi'];
+  const initials = (r.company_name || '?').substring(0, 2).toUpperCase();
+  const phone = (r.phone || '').trim();
+  const today = new Date().toISOString().slice(0, 10);
+  const overdue = r.started && String(r.due_date).slice(0, 10) < today;
+
+  // Hızlı aksiyon linkleri
+  let actions = '';
+  if (phone) actions += `<a href="tel:${phone.replace(/\s/g, '')}" class="wq-action">📞 Ara</a>`;
+  if (r.step_type === 'email' && r.email) actions += `<a href="mailto:${r.email}?subject=${encodeURIComponent(r.subject || '')}" class="wq-action">📧 E-posta Yaz</a>`;
+  if (r.step_type === 'whatsapp' && phone) actions += `<a href="https://wa.me/${formatWhatsApp(phone)}" target="_blank" class="wq-action">🟢 WhatsApp</a>`;
+  if (r.linkedin_url) actions += `<a href="${normalizeUrl(r.linkedin_url)}" target="_blank" class="wq-action">💼 LinkedIn Profili</a>`;
+  else if (r.step_type.startsWith('linkedin')) actions += `<a href="https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(r.company_name || '')}" target="_blank" class="wq-action">💼 LinkedIn'de Ara</a>`;
+
+  const opts = OUTCOME_OPTIONS[r.step_type] || OUTCOME_OPTIONS._msg;
+  const outcomeBtns = opts.map(o =>
+    `<button class="oc-btn ${o.cls}" onclick="wqSubmit('${r.id}','${o.result}')">${o.label}</button>`).join('');
+
+  card.innerHTML = `
+    <div class="wq-customer-card ${overdue ? 'wq-overdue' : ''}">
+      <div class="wq-cust-head">
+        <div class="company-initials" style="width:46px;height:46px;font-size:17px;background:${cfg.bg};color:${cfg.color}">${initials}</div>
+        <div class="wq-cust-info">
+          <div class="wq-cust-company">${escapeHtml(r.company_name)}</div>
+          <div class="wq-cust-meta">
+            ${r.contact_name ? escapeHtml(r.contact_name) + (r.title ? ' · ' + escapeHtml(r.title) : '') + ' · ' : ''}
+            ${phone ? escapeHtml(phone) + ' · ' : ''}${r.city ? escapeHtml(r.city) + ' · ' : ''}
+            <span class="wq-tier">${tierLabels[wqTier(r)]}</span>
+            ${overdue ? '<span class="wq-overdue-tag">⚠️ Geciken takip</span>' : (r.started ? '<span class="wq-follow-tag">🔄 Takip</span>' : '<span class="wq-new-tag">🆕 Yeni</span>')}
           </div>
-        </td>
-        <td>${c.contact_name}</td>
-        <td>${c.phone || '-'}</td>
-        <td>${statusPill(c.status, STATUS_CONFIG)}</td>
-        <td style="font-size:12px;color:var(--text-secondary)">${timeAgo(c.last_contacted)}</td>
-        <td>
-          <button class="table-action-btn" onclick="event.stopPropagation();logCall('${c.id}')">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.06 1.18 2 2 0 012.03 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91A16 16 0 0016.09 17.91l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
-            Ara
-          </button>
-        </td>
-      </tr>`;
-  }).join('');
+        </div>
+        <button class="btn-secondary btn-sm" onclick="showCustomerDrawer('${r.customer_id}')">Detay</button>
+      </div>
+
+      <div class="wq-step">
+        <div class="wq-step-label">➡️ ÖNERİLEN ADIM</div>
+        <div class="wq-step-title">${cfg.icon} ${cfg.label}${r.subject ? ` — "${escapeHtml(r.subject)}"` : ''}</div>
+        ${r.body ? `<div class="wq-step-script">${escapeHtml(r.body)}</div>` : ''}
+      </div>
+
+      ${actions ? `<div class="wq-actions">${actions}</div>` : ''}
+
+      <div class="wq-outcome">
+        <div class="wq-outcome-label">Ne oldu?</div>
+        <div class="seq-outcome-btns">${outcomeBtns}</div>
+        <input id="wq-note" type="text" class="cm-input" style="margin-top:10px" placeholder="Not (opsiyonel)…"/>
+        <div class="wq-footer">
+          <div class="seq-snooze-row" style="border:none;margin:0;padding:0">
+            <span class="seq-snooze-label">Ertele:</span>
+            <button class="seq-snooze-btn" onclick="wqSnooze('${r.id}',1)">Yarın</button>
+            <button class="seq-snooze-btn" onclick="wqSnooze('${r.id}',3)">+3 gün</button>
+            <button class="seq-snooze-btn" onclick="wqSnooze('${r.id}',7)">+1 hafta</button>
+          </div>
+          <button class="btn-secondary btn-sm" onclick="wqSkip('${r.customer_id}')">Atla →</button>
+        </div>
+      </div>
+    </div>`;
 }
 
-function logCall(customerId) {
-  const c = DEMO_CUSTOMERS.find(x => x.id === customerId);
-  if (c) {
-    if (confirm(`${c.company_name} için aramayı kaydet?`)) {
-      alert(`✓ ${c.company_name} araması kaydedildi.`);
-    }
+function renderWqWarmCard(card, prog) {
+  const list = state.wq.warm || [];
+  if (prog) prog.innerHTML = `
+    <span class="wq-stat">✅ Bugün işlenen: <strong>${state.wq.processed}</strong></span>
+    <span class="wq-stat">🔥 Sırada: <strong>${list.length}</strong> sıcak müşteri</span>`;
+  const c = list[0];
+  if (!c) {
+    card.innerHTML = `<div class="dash-empty"><div style="font-size:36px;margin-bottom:6px">🎉</div>
+      <div style="font-weight:600;color:var(--text-secondary)">Tekrar satış kuyruğu boş!</div>
+      <div style="font-size:13px;margin-top:4px">${state.warmInterval} gün dolan müşteriler burada belirir.</div></div>`;
+    return;
   }
+  const initials = (c.company_name || '?').substring(0, 2).toUpperCase();
+  const ds = daysSince(c.last_contacted);
+  const phone = (c.phone || '').trim();
+  const msg = fillTemplate(state.warmTemplate, c);
+  card.innerHTML = `
+    <div class="wq-customer-card wq-warm-card">
+      <div class="wq-cust-head">
+        <div class="company-initials" style="width:46px;height:46px;font-size:17px;background:#FFF7ED;color:#C2410C">${initials}</div>
+        <div class="wq-cust-info">
+          <div class="wq-cust-company">${escapeHtml(c.company_name)}</div>
+          <div class="wq-cust-meta">${c.contact_name ? escapeHtml(c.contact_name) + ' · ' : ''}${phone ? escapeHtml(phone) + ' · ' : ''}
+            <span class="wq-warm-tag">🔥 Satış müşterisi · ${c.last_contacted ? ds + ' gündür temassız' : 'hiç temas yok'}</span></div>
+        </div>
+        <button class="btn-secondary btn-sm" onclick="showCustomerDrawer('${c.id}')">Detay</button>
+      </div>
+      <div class="wq-step">
+        <div class="wq-step-label">➡️ ÖNERİLEN ADIM</div>
+        <div class="wq-step-title">🟢 WhatsApp tekrar satış mesajı</div>
+        <div class="wq-step-script">${escapeHtml(msg)}</div>
+      </div>
+      <div class="wq-actions">
+        ${phone ? `<a href="${warmWhatsAppLink(c)}" target="_blank" class="wq-action wq-action-wa">🟢 WhatsApp Gönder</a>
+        <a href="tel:${phone.replace(/\s/g, '')}" class="wq-action">📞 Ara</a>` : '<span style="font-size:12.5px;color:var(--text-tertiary)">Telefon yok — LinkedIn/e-posta ile ulaşın</span>'}
+      </div>
+      <div class="wq-footer" style="margin-top:14px">
+        <button class="seq-task-btn done" style="padding:10px 18px" onclick="wqWarmDone('${c.id}')">✓ Temas Kuruldu</button>
+        <button class="btn-secondary btn-sm" onclick="wqWarmSkip('${c.id}')">Atla →</button>
+      </div>
+    </div>`;
+}
+
+// ── Kuyruk aksiyonları ──
+async function wqSubmit(taskId, result) {
+  const note = document.getElementById('wq-note')?.value.trim() || '';
+  try {
+    const res = await apiFetch(`/api/sequence-tasks?id=${taskId}`, { method: 'PUT', body: { status: 'done', result, note } });
+    state.wq.processed++;
+    let msg = '✓ Kaydedildi — sıradaki müşteri';
+    if (res.customer_status === 'interested') msg = '⭐ Müşteri İLGİLİ — akış duraklatıldı, sıradaki geliyor';
+    else if (res.customer_status === 'lost') msg = 'Müşteri ilgilenmedi — akış durduruldu';
+    if (typeof showToast === 'function') showToast(msg);
+    await wqReload();
+    renderHedef();
+  } catch (e) { alert('Hata: ' + e.message); }
+}
+
+async function wqSnooze(taskId, days) {
+  try {
+    await apiFetch(`/api/sequence-tasks?id=${taskId}`, { method: 'PUT', body: { status: 'snoozed', snooze_days: days } });
+    if (typeof showToast === 'function') showToast(`⏰ Müşteri ${days === 1 ? 'yarına' : '+' + days + ' güne'} ertelendi`);
+    await wqReload();
+  } catch (e) { alert('Hata: ' + e.message); }
+}
+
+function wqSkip(customerId) {
+  state.wq.skipped.add(customerId);
+  renderWqCard();
+}
+
+async function wqReload() {
+  try { state.wq.rows = await apiFetch('/api/sequence-tasks?scope=queue'); } catch {}
+  updateWqBadges();
+  renderWqCard();
+}
+
+async function wqWarmDone(customerId) {
+  try {
+    await apiFetch('/api/activities', { method: 'POST',
+      body: { customer_id: customerId, result: 'tekrar_temas', note: 'WhatsApp tekrar satış teması (kuyruk)' } });
+    const c = state.customers.find(x => x.id === customerId);
+    if (c) c.last_contacted = new Date().toISOString();
+    state.wq.warm = (state.wq.warm || []).filter(x => x.id !== customerId);
+    state.wq.processed++;
+    updateWqBadges(); updateWarmBadge();
+    if (typeof showToast === 'function') showToast('✓ Temas kaydedildi — sıradaki müşteri');
+    renderWqCard();
+    renderHedef();
+  } catch (e) { alert('Hata: ' + e.message); }
+}
+
+function wqWarmSkip(customerId) {
+  const list = state.wq.warm || [];
+  const i = list.findIndex(x => x.id === customerId);
+  if (i > -1) list.push(list.splice(i, 1)[0]);
+  renderWqCard();
+}
+
+// ── Sahipsiz müşteri denetimi: hiçbir akışta olmayan cold müşteriler ──
+function renderWqOrphans() {
+  const el = document.getElementById('wq-orphan-banner');
+  if (!el) return;
+  const inQueue = new Set((state.wq.rows || []).map(r => r.customer_id));
+  const orphans = state.customers.filter(c =>
+    !['sold', 'lost', 'interested'].includes(c.status) && !inQueue.has(c.id));
+  state.wq.orphans = orphans.map(c => c.id);
+  el.innerHTML = orphans.length ? `
+    <div class="wq-orphan">
+      ⚠️ <strong>${orphans.length} müşteri</strong> hiçbir akışta değil — takipsiz müşteri kalmasın.
+      <button class="btn-primary btn-sm" onclick="wqEnrollOrphans()">Kuyruğa Ekle</button>
+    </div>` : '';
+}
+
+async function wqEnrollOrphans() {
+  const ids = state.wq.orphans || [];
+  if (!ids.length) return;
+  await enrollIdsIntoDefaultSequence(ids);
+  if (typeof showToast === 'function') showToast(`${ids.length} müşteri kuyruğa eklendi`);
+  renderCalls();
 }
 
 /* ──────────────────────────────────────────────

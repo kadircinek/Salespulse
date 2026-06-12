@@ -1142,14 +1142,27 @@ async function renderOffers() {
 ────────────────────────────────────────────── */
 const WQ_VISIBLE = 25; // önde tutulacak müşteri sayısı (rolling)
 
-// İletişim bilgisi önceliği: 0=tel+linkedin, 1=linkedin, 2=tel, 3=sadece firma
+// Veri önceliği: en çok veri olan müşteri önce çıkar (aramalar hızlı sonuç versin)
+// 0 = telefon + kişi + LinkedIn (tam veri)  1 = LinkedIn  2 = telefon  3 = sadece firma
 function wqTier(c) {
   const hasPhone = !!(c.phone || '').trim();
   const hasLi    = !!(c.linkedin_url || '').trim();
-  if (hasPhone && hasLi) return 0;
+  const hasName  = !!(c.contact_name || '').trim();
+  if (hasPhone && hasName && hasLi) return 0;
   if (hasLi) return 1;
   if (hasPhone) return 2;
   return 3;
+}
+
+// Veri zenginliği skoru (ikincil sıralama: tier içinde çok veri → az veri)
+function wqRichness(c) {
+  let n = 0;
+  if ((c.phone || '').trim()) n++;
+  if ((c.contact_name || '').trim()) n++;
+  if ((c.linkedin_url || '').trim()) n++;
+  if ((c.email || '').trim()) n++;
+  if ((c.title || '').trim()) n++;
+  return n;
 }
 
 async function renderCalls() {
@@ -1181,9 +1194,11 @@ function wqColdQueue() {
   // Takipteki müşteriler: en az 1 adımı yapılmış + vadesi gelmiş (önce bunlar)
   const followups = rows.filter(r => r.started && day(r) <= today)
     .sort((a, b) => day(a).localeCompare(day(b)) || (b.fit_score || 0) - (a.fit_score || 0));
-  // Yeni müşteriler (hiç başlanmamış) — iletişim önceliği → fit_score (rolling havuz)
+  // Yeni müşteriler (hiç başlanmamış) — veri önceliği: tier → veri zenginliği → fit_score
   const fresh = rows.filter(r => !r.started)
-    .sort((a, b) => wqTier(a) - wqTier(b) || (b.fit_score || 0) - (a.fit_score || 0));
+    .sort((a, b) => wqTier(a) - wqTier(b)
+                 || wqRichness(b) - wqRichness(a)
+                 || (b.fit_score || 0) - (a.fit_score || 0));
   let q = [...followups, ...fresh];
   // Atlananlar sona
   const skipped = state.wq.skipped;
@@ -1229,7 +1244,7 @@ function renderWqCard() {
   }
 
   const cfg = SEQ_STEP_TYPES[r.step_type] || { label: r.step_type, icon: '•', bg: '#F3F4F6', color: '#6B7280' };
-  const tierLabels = ['📞+💼 Tel + LinkedIn', '💼 LinkedIn', '📞 Telefon', '🏢 Sadece firma bilgisi'];
+  const tierLabels = ['📞👤💼 Tam veri (tel+kişi+LinkedIn)', '💼 LinkedIn', '📞 Telefon', '🏢 Sadece firma bilgisi'];
   const initials = (r.company_name || '?').substring(0, 2).toUpperCase();
   const phone = (r.phone || '').trim();
   const today = new Date().toISOString().slice(0, 10);
